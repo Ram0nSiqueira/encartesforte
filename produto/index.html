@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Encarte de Produto Único — EncartesForte</title>
+</head>
+<body>
+  <header class="topbar">
+    <a href="../" class="topbar__logo">Encartes<span>Forte</span></a>
+    <span class="topbar__tool">Encarte de produto único</span>
+  </header>
+
+  <main class="layout">
+    <form class="card" id="form" autocomplete="off">
+      <h1>Dados do produto</h1>
+      <p class="hint">Escolha o modelo, preencha os campos e a imagem é atualizada na hora.</p>
+
+      <fieldset class="models">
+        <legend>Modelo</legend>
+        <div class="models__list" id="modelos"></div>
+      </fieldset>
+
+      <label class="field">
+        Nome do produto
+        <input id="nome" maxlength="40" placeholder="Ex.: Ovos Dom Bosco" value="Ovos Dom Bosco">
+      </label>
+
+      <label class="field">
+        Valor (R$)
+        <input id="valor" inputmode="decimal" maxlength="10" placeholder="Ex.: 11,99" value="11,99">
+        <small class="error" id="valorErro" hidden>Valor inválido. Use o formato 11,99.</small>
+      </label>
+
+      <label class="field">
+        Unidade de venda
+        <input id="unidade" maxlength="40" placeholder="Ex.: Cartela com 20 unidades, kg, Pacote 5kg" value="Cartela com 20 Unidades">
+      </label>
+
+      <button type="button" class="btn" id="baixar">Baixar imagem (PNG)</button>
+    </form>
+
+    <section class="preview">
+      <canvas id="preview" width="928" height="1152" aria-label="Prévia do encarte"></canvas>
+    </section>
+  </main>
+
+  <script type="module" src="/src/produto/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Encarte com Fotos — EncartesForte</title>
+</head>
+<body>
+  <header class="topbar">
+    <a href="../" class="topbar__logo">Encartes<span>Forte</span></a>
+    <span class="topbar__tool">Encarte com fotos de produtos</span>
+  </header>
+
+  <main class="layout">
+    <form class="card" id="form" autocomplete="off">
+      <h1>Montar encarte</h1>
+      <p class="hint">Escolha o modelo e preencha os produtos. Em “Enviar foto”, o fundo é tirado automaticamente e a foto fica salva para o produto. Depois é só digitar o nome e clicar em “Buscar foto salva” (ou Enter).</p>
+      <p class="server-status" id="servidor">Verificando o banco de fotos…</p>
+
+      <fieldset class="models">
+        <legend>Modelo</legend>
+        <div class="models__list" id="modelos"></div>
+      </fieldset>
+
+      <fieldset class="validade" id="validadeField">
+        <legend>Validade das ofertas</legend>
+        <p class="hint">As datas escritas no encarte são trocadas automaticamente.</p>
+        <div class="validade__datas">
+          <label class="field">De <input type="date" id="validadeInicio"></label>
+          <label class="field">Até <input type="date" id="validade"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="validadeEstoque"> “ou enquanto durarem os estoques”</label>
+      </fieldset>
+
+      <fieldset class="cores-quadrados" id="coresQuadrados">
+        <legend>Cor do Card De Produtos</legend>
+        <div class="cores-quadrados__modo">
+          <label><input type="radio" name="modoCor" value="todos"> Mesma cor para todos</label>
+          <label><input type="radio" name="modoCor" value="cada"> Escolher em cada produto</label>
+        </div>
+        <div class="quadrado" id="corTodos"></div>
+        <p class="hint" id="corCadaDica" hidden>Escolha a cor no campo “Cor do Card De Produtos” de cada produto.</p>
+      </fieldset>
+
+      <div id="produtos" class="products"></div>
+      <div class="cards-acoes" id="cardsAcoes">
+        <button type="button" class="btn-ghost btn-gold" id="adicionarCard">+ Adicionar card</button>
+        <button type="button" class="btn-ghost" id="removerCardVazio" title="Remove um card que ainda não tem nenhum dado preenchido">− Remover card vazio</button>
+        <span class="hint" id="cardsInfo"></span>
+      </div>
+
+      <button type="button" class="btn" id="baixar">Baixar imagem (PNG)</button>
+      <p class="error" id="erroDownload" hidden></p>
+    </form>
+
+    <section class="preview">
+      <canvas id="preview" aria-label="Prévia do encarte"></canvas>
+      <p class="preview__status" id="status"></p>
+    </section>
+  </main>
+
+  <script type="module" src="/src/fotos/main.ts"></script>
+</body>
+</html>

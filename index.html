@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EncartesForte</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Aba do menu (lado esquerdo) -->
+  <button class="menu-tab" id="menuTab" aria-controls="menu" aria-expanded="false">
+    <span class="menu-tab__icon">☰</span>
+    <span class="menu-tab__label">Ferramentas</span>
+  </button>
+
+  <!-- Menu lateral -->
+  <div class="overlay" id="overlay" hidden></div>
+  <aside class="menu" id="menu" aria-hidden="true">
+    <div class="menu__head">
+      <span class="menu__title">Ferramentas</span>
+      <button class="menu__close" id="menuClose" aria-label="Fechar menu">✕</button>
+    </div>
+    <nav class="menu__list">
+      <a class="tool" href="produto/">
+        <span class="tool__icon">🏷️</span>
+        <span class="tool__text">
+          <strong>Encarte de Produto Único</strong>
+          <small>Informe nome, valor e unidade de venda e gere a arte “Oferta Especial”.</small>
+        </span>
+      </a>
+      <a class="tool" href="fotos/">
+        <span class="tool__icon">🛒</span>
+        <span class="tool__text">
+          <strong>Encarte com Fotos de Produtos</strong>
+          <small>Vários produtos com foto, nome e valor. A foto é buscada automaticamente ou enviada por você.</small>
+        </span>
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Conteúdo -->
+  <main class="hero">
+    <h1 class="logo">Encartes<span>Forte</span></h1>
+    <p class="tagline">O Bom Vizinho</p>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

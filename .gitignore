@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.local
+.env.local
+.env.*.local
+logs/
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Serviço local de fotos (Python): ambiente, banco e imagens geradas
+servico-fotos/.venv/
+__pycache__/
+dados/
+
+# Backups do projeto
+versoes/
