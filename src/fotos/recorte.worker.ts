@@ -6,8 +6,10 @@
 //   produto 100% sólido, buracos preenchidos, pontinhos soltos descartados, só o contorno suavizado.
 import * as ort from 'onnxruntime-web/wasm';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
+import mjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url';
 
-ort.env.wasm.wasmPaths = { wasm: wasmUrl };
+// O .mjs separado é necessário para o modo com vários núcleos (cada núcleo abre um worker com ele).
+ort.env.wasm.wasmPaths = { wasm: wasmUrl, mjs: mjsUrl };
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
 const MODELO_PARTES = ['/modelos/isnet-fp16.part1', '/modelos/isnet-fp16.part2'];

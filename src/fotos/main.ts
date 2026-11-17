@@ -528,7 +528,9 @@ async function uploadPhoto(i: number, file: File) {
   setStatus(i, 'Tirando o fundo da foto… (alguns segundos)');
   try {
     const r = await salvarFotoPrincipal(file, nome, codigo, (a, b) =>
-      setStatus(i, `Preparando a remoção de fundo (só na primeira vez): ${a.toFixed(0)} de ${b.toFixed(0)} MB…`));
+      setStatus(i, a >= b - 1.5
+        ? 'Tirando o fundo da foto… (alguns segundos)'
+        : `Preparando a remoção de fundo (só na primeira vez): ${a.toFixed(0)} de ${b.toFixed(0)} MB…`));
     if (r.salva) {
       p.photo = r.imagem_url;
       p.photoSource = 'Foto salva';
