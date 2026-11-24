@@ -17,11 +17,9 @@ function partes(iso: string) {
   return { d: String(d).padStart(2, '0'), m: String(m).padStart(2, '0'), y: String(y), mes: MESES[m - 1] };
 }
 
-interface LocalData {
-  apagar: { tipo: 'bordas'; rect: EraseRect; textura?: Rect } | { tipo: 'cor'; rect: Rect; cor: string };
+/** Estilo de um texto escrito numa caixa da arte (datas, contatos). */
+export interface EstiloTexto {
   caixa: Rect;
-  /** Monta o texto a partir das datas. */
-  texto: (v: Validade) => string;
   fonte: string;
   peso: number;
   cor: string | [number, string][];
@@ -30,6 +28,12 @@ interface LocalData {
   alinhar: 'esquerda' | 'centro';
   maiusculas?: boolean;
   espacamento?: number; // entre letras, em fração do tamanho
+}
+
+interface LocalData extends EstiloTexto {
+  apagar: { tipo: 'bordas'; rect: EraseRect; textura?: Rect } | { tipo: 'cor'; rect: Rect; cor: string };
+  /** Monta o texto a partir das datas. */
+  texto: (v: Validade) => string;
 }
 
 const estoque = (v: Validade, frase: string) => (v.estoque ? ` ${frase}` : '.');
@@ -102,25 +106,71 @@ const LOCAIS: Record<string, LocalData[]> = {
       fonte: 'Oswald', peso: 700, cor: [[0, '#6a3e17'], [1, '#4a2a0e']], tamanho: 36, maxLinhas: 1, alinhar: 'centro', maiusculas: true, espacamento: 0.05,
     },
   ],
+  'black-friday-hortifruti': [
+    {
+      // Pílula "VÁLIDO DE [00/00] A [00/00]" (o interior é refeito; a borda verde fica).
+      apagar: { tipo: 'bordas', rect: { x: 1486, y: 82, w: 570, h: 50 } },
+      caixa: { x: 1492, y: 86, w: 558, h: 42 },
+      texto: (v) => {
+        const i = partes(v.inicio), f = partes(v.fim);
+        if (!f) return '';
+        return i ? `Válido de ${i.d}/${i.m} a ${f.d}/${f.m}` : `Válido até ${f.d}/${f.m}`;
+      },
+      fonte: 'Montserrat', peso: 800, cor: 'rgb(125,220,31)', tamanho: 44, maxLinhas: 1, alinhar: 'centro', maiusculas: true, espacamento: 0.02,
+    },
+  ],
+  'semana-do-hortifruti': [
+    {
+      // Rodapé verde-escuro, à esquerda.
+      apagar: { tipo: 'cor', rect: { x: 40, y: 1022, w: 282, h: 46 }, cor: 'rgb(4,57,1)' },
+      caixa: { x: 44, y: 1025, w: 274, h: 40 },
+      texto: (v) => {
+        const i = partes(v.inicio), f = partes(v.fim);
+        if (!f) return '';
+        const de = i ? `de ${i.d}/${i.m} até ${f.d}/${f.m}` : `até ${f.d}/${f.m}`;
+        return `Ofertas válidas ${de}${v.estoque ? '\nou enquanto durarem os estoques.' : '.'}`;
+      },
+      fonte: 'Montserrat', peso: 700, cor: '#ffffff', tamanho: 13, maxLinhas: 2, alinhar: 'centro', maiusculas: true,
+    },
+  ],
+  'ofertas-hortifruti': [
+    {
+      // Embaixo dos produtos, no painel branco.
+      apagar: { tipo: 'cor', rect: { x: 150, y: 1108, w: 440, h: 38 }, cor: '#ffffff' },
+      caixa: { x: 156, y: 1110, w: 428, h: 34 },
+      texto: (v) => {
+        const i = partes(v.inicio), f = partes(v.fim);
+        if (!f) return '';
+        const de = i && i.m === f.m ? `do dia ${i.d} a ${f.d}/${f.m}/${f.y}` : i ? `de ${i.d}/${i.m} a ${f.d}/${f.m}/${f.y}` : `até ${f.d}/${f.m}/${f.y}`;
+        return `Ofertas válidas ${de}${v.estoque ? '\nou enquanto durarem os estoques' : ''}`;
+      },
+      fonte: 'Montserrat', peso: 700, cor: 'rgb(62,76,34)', tamanho: 11, maxLinhas: 2, alinhar: 'centro', maiusculas: true, espacamento: 0.22,
+    },
+  ],
 };
+
+LOCAIS['black-friday-horti-coluna'] = LOCAIS['semana-do-hortifruti'];
 
 export const temDatas = (id: string) => !!LOCAIS[id];
 
 /** Quebra o texto em até `max` linhas que caibam em `w`, no maior tamanho possível. */
-function ajustar(ctx: CanvasRenderingContext2D, l: LocalData, texto: string) {
+function ajustar(ctx: CanvasRenderingContext2D, l: EstiloTexto, texto: string) {
   const fonte = (t: number) => `${l.peso} ${t}px '${l.fonte}', Arial, sans-serif`;
-  const palavras = texto.split(' ');
+  // "\n" no texto força a quebra de linha naquele ponto.
+  const paragrafos = texto.split('\n').map((p) => p.split(' '));
   for (let t = l.tamanho; t >= 6; t -= 0.5) {
     ctx.font = fonte(t);
     ctx.letterSpacing = `${(l.espacamento ?? 0) * t}px`;
     const linhas: string[] = [];
-    let atual = '';
-    for (const p of palavras) {
-      const tent = atual ? `${atual} ${p}` : p;
-      if (ctx.measureText(tent).width <= l.caixa.w || !atual) atual = tent;
-      else { linhas.push(atual); atual = p; }
+    for (const palavras of paragrafos) {
+      let atual = '';
+      for (const p of palavras) {
+        const tent = atual ? `${atual} ${p}` : p;
+        if (ctx.measureText(tent).width <= l.caixa.w || !atual) atual = tent;
+        else { linhas.push(atual); atual = p; }
+      }
+      if (atual) linhas.push(atual);
     }
-    if (atual) linhas.push(atual);
     const lh = t * 1.15;
     const cabe = linhas.length <= l.maxLinhas && linhas.every((x) => ctx.measureText(x).width <= l.caixa.w) && linhas.length * lh <= l.caixa.h + t * 0.2;
     if (cabe) return { linhas, t, lh, fonte: fonte(t) };
@@ -176,11 +226,19 @@ export async function baseComDatas(
       }
     }
 
-    let texto = l.texto(v);
-    if (!texto) continue;
-    if (l.maiusculas) texto = texto.toUpperCase();
-    const a = ajustar(ctx, l, texto);
-    if (!a) continue;
+    escrever(ctx, l, l.texto(v));
+  }
+  if (cache.size > 30) cache.clear();
+  cache.set(chave, c);
+  return c;
+}
+
+/** Escreve o texto na caixa, no maior tamanho que cabe (quebrando em linhas). */
+export function escrever(ctx: CanvasRenderingContext2D, l: EstiloTexto, texto: string) {
+  if (!texto) return;
+  if (l.maiusculas) texto = texto.toUpperCase();
+  const a = ajustar(ctx, l, texto);
+  if (a) {
     ctx.save();
     ctx.font = a.fonte;
     ctx.letterSpacing = `${(l.espacamento ?? 0) * a.t}px`;
@@ -198,7 +256,4 @@ export async function baseComDatas(
     a.linhas.forEach((linha, i) => ctx.fillText(linha, x, y0 + i * a.lh + a.t * 0.9));
     ctx.restore();
   }
-  if (cache.size > 30) cache.clear();
-  cache.set(chave, c);
-  return c;
 }

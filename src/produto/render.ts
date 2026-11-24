@@ -89,7 +89,24 @@ export function eraseRect(ctx: CanvasRenderingContext2D, r: EraseRect) {
   const rad = 6;
   const L = edgeColors(ctx, r.x - depth, r.y - rad, depth, r.h + rad * 2, 'y', r.h, rad);
   const R = r.noRight ? L : edgeColors(ctx, r.x + r.w, r.y - rad, depth, r.h + rad * 2, 'y', r.h, rad);
-  const T = edgeColors(ctx, r.x - rad, r.y - depth, r.w + rad * 2, depth, 'x', r.w, rad, r.noRight);
+  let T = edgeColors(ctx, r.x - rad, r.y - depth, r.w + rad * 2, depth, 'x', r.w, rad, r.noRight);
+  if (r.noTop) {
+    // Borda de cima com detalhes (ex.: um título encostado): usa só a cor geral dela,
+    // bem suavizada, para não "escorrer" listras para dentro da área.
+    const raio = Math.max(20, Math.round(r.w * 0.12));
+    const S = new Float32Array(r.w * 3);
+    for (let x = 0; x < r.w; x++) {
+      for (let c = 0; c < 3; c++) {
+        let soma = 0, n = 0;
+        for (let k = -raio; k <= raio; k++) {
+          const xx = Math.min(r.w - 1, Math.max(0, x + k));
+          soma += T[xx * 3 + c]; n++;
+        }
+        S[x * 3 + c] = soma / n;
+      }
+    }
+    T = S;
+  }
   const B = edgeColors(ctx, r.x - rad, r.y + r.h, r.w + rad * 2, depth, 'x', r.w, rad, r.noRight);
 
   const corner = (a: Float32Array, ai: number, b: Float32Array, bi: number, c: number) => (a[ai * 3 + c] + b[bi * 3 + c]) / 2;

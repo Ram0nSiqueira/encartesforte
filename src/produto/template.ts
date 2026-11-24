@@ -6,6 +6,8 @@ export interface Rect { x: number; y: number; w: number; h: number }
 export interface EraseRect extends Rect {
   /** Não usa a borda direita como referência (ex.: texto encostado na borda do papel). */
   noRight?: boolean;
+  /** Borda de cima com detalhes (ex.: um título encostado): usa só a cor geral dela, bem suavizada. */
+  noTop?: boolean;
 }
 
 /** Um texto que se ajusta automaticamente dentro de uma caixa. */

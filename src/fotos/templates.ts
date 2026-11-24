@@ -8,6 +8,10 @@ import fimDeAno from '../../ImagemEnarteVertical/final2.jpg';
 import fimDeSemanaImbativel from '../../ImagemEnarteVertical/teste.jpg';
 import ofertasDeBebidas from '../../ImagemEnarteVertical/teste02.jpg';
 import blackFruti from '../../ImagemEnarteVertical/10643735.jpg';
+import blackFridayHortifruti from '../../ImagemEnarteVertical/Black Friday Hortifruti@2x.png';
+import semanaDoHortifruti from '../../ImagemEnarteVertical/e61faf71a726d80e0b14f6ca73b9a1ce (1).jpg';
+import ofertasHortifruti from '../../ImagemEnarteVertical/e86cb61edd5afaa5b8c43afcf9f5b7a9 (1).jpg';
+import blackFridayHortiColuna from '../../ImagemEnarteVertical/final3.jpg';
 import type { EraseRect, Rect } from '../produto/template';
 
 export interface Circle { cx: number; cy: number; r: number }
@@ -108,11 +112,19 @@ export interface EstiloPreco {
   rotulo?: { texto: string; cor: string };
   /** Círculo na ponta esquerda da etiqueta, com o "R$" dentro (cor do círculo). */
   circuloMoeda?: string;
+  /** Raio do círculo do "R$" em fração da altura (padrão 0.5 = altura toda, dentro da etiqueta). */
+  circuloRaio?: number;
   /** Não mostrar "R$" (só o valor), como em alguns modelos. */
   semMoeda?: boolean;
   /** "R$" ao lado do número: tamanho e altura em fração do número (padrão 0.5 e 0.28). */
   moedaTamanho?: number;
   moedaSubir?: number;
+  /** Bloco colorido na ponta esquerda da etiqueta com o "R$" (largura em fração da etiqueta). */
+  blocoMoeda?: { cor: string; largura: number };
+  /** Faixa colorida por baixo da etiqueta (efeito 3D). */
+  baseSombra?: string;
+  /** Fonte dos números (ex.: 'Anton'). */
+  fonteNumero?: string;
   corMoeda: string;
   corInteiro: string;
   corCentavos: string;
@@ -144,8 +156,13 @@ export interface EstiloCelula {
     pontos?: string;
   };
   foto: RelRect;
-  /** Fundo atrás da foto (ex.: quadro branco dentro de um card colorido). */
-  fundoFoto?: { cor: string; raio: number; rect: RelRect };
+  /**
+   * Fundo atrás da foto (ex.: quadro branco dentro de um card colorido). `radial`: brilho do
+   * centro para a borda (substitui `cor`); `cantos: 'topo'`: só os cantos de cima arredondados.
+   */
+  fundoFoto?: { cor: string; raio: number; rect: RelRect; radial?: [string, string]; cantos?: 'topo' };
+  /** Selo de texto no card (ex.: "BLACK"), em formato de pílula. */
+  selo?: { texto: string; fundo: string; cor: string; rect: RelRect };
   nome: RelRect & { estilo: EstiloNome };
   preco: RelRect & { estilo: EstiloPreco };
 }
@@ -778,7 +795,173 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     ],
     hasValidity: false,
   },
+  {
+    kind: 'grade',
+    id: 'black-friday-hortifruti',
+    name: 'Black Friday Hortifrúti (12 produtos)',
+    src: blackFridayHortifruti,
+    width: 2160,
+    height: 2700,
+    // Fundo escuro listrado refeito pelas bordas, com as listras diagonais devolvidas
+    // (trecho limpo de 79 px = 2 listras, repetido alinhado).
+    limpar: [
+      { tipo: 'coons', rect: { x: 40, y: 640, w: 2080, h: 1656 }, textura: { x: 1000, y: 2300, w: 79, h: 79 } },
+    ],
+    grupos: [
+      {
+        area: { x: 62, y: 660, w: 2036, h: 1624 },
+        gapX: 36,
+        gapY: 32,
+        padrao: 12,
+        max: 20,
+        escalaMax: 1.6,
+        estilo: {
+          base: { w: 482, h: 520 },
+          caixa: { fundo: 'rgb(15,26,10)', borda: 'rgb(44,74,20)', larguraBorda: 2, raio: 40, rect: { x: 0, y: 0, w: 1, h: 1 } },
+          // Parte de cima do card (onde fica a foto), com brilho no centro.
+          fundoFoto: { cor: 'rgb(17,30,10)', radial: ['rgb(31,54,17)', 'rgb(9,15,5)'], raio: 40, cantos: 'topo', rect: { x: 0.003, y: 0.003, w: 0.994, h: 0.582 } },
+          selo: { texto: 'BLACK', fundo: 'rgb(125,220,31)', cor: '#0a0a0a', rect: { x: 0.041, y: 0.042, w: 0.272, h: 0.092 } },
+          foto: { x: 0.06, y: 0.07, w: 0.88, h: 0.5 },
+          nome: {
+            x: 0.05, y: 0.61, w: 0.9, h: 0.12,
+            estilo: { cor: '#ffffff', peso: 800, maiusculas: true, maxLinhas: 2, tamanhoMax: 40, tamanhoMin: 18 },
+          },
+          preco: {
+            x: 0.27, y: 0.744, w: 0.46, h: 0.2,
+            estilo: {
+              forma: 'retangulo', fundo: '#ffffff', raio: 0.13,
+              blocoMoeda: { cor: 'rgb(125,220,31)', largura: 0.33 }, baseSombra: 'rgb(63,122,12)',
+              corMoeda: '#0a0a0a', corInteiro: '#0a0a0a', corCentavos: '#0a0a0a', corUnidade: 'rgb(63,122,12)',
+              unidade: 'sob-centavos', formatoUnidade: '{U}', fonteNumero: 'Anton', centavosTamanho: 0.46,
+              tamanhoInteiro: 0.92, linhaBase: 0.88,
+            },
+          },
+        },
+      },
+    ],
+    hasValidity: false,
+  },
+  {
+    kind: 'grade',
+    id: 'semana-do-hortifruti',
+    name: 'Semana do Hortifrúti (3 + 4 produtos)',
+    src: semanaDoHortifruti,
+    width: 810,
+    height: 1080,
+    // Coluna verde da esquerda e fundo da direita refeitos pelas bordas (degradês).
+    limpar: [
+      { tipo: 'coons', rect: { x: 28, y: 163, w: 330, h: 845 } },
+      { tipo: 'colunas', rect: { x: 372, y: 440, w: 436, h: 568 }, colunas: [{ x: 373, pontos: [450, 500, 545, 660, 720, 780, 840, 900, 1000] }, { x: 806, pontos: [450, 500, 560, 620, 680, 740, 800, 860, 920, 1000] }], mesclarTopo: 90 },
+    ],
+    grupos: [
+      {
+        titulo: 'Coluna verde',
+        area: { x: 22, y: 160, w: 343, h: 855 },
+        gapX: 0,
+        gapY: 0,
+        padrao: 3,
+        max: 3,
+        estilo: {
+          base: { w: 343, h: 285 },
+          foto: { x: 0.03, y: 0.08, w: 0.94, h: 0.66 },
+          nome: {
+            x: 0.05, y: 0.0, w: 0.9, h: 0.075,
+            estilo: { cor: 'rgb(20,48,10)', peso: 600, maiusculas: true, maxLinhas: 1, tamanhoMax: 14, tamanhoMin: 8 },
+          },
+          preco: {
+            x: 0.53, y: 0.695, w: 0.42, h: 0.245,
+            estilo: {
+              forma: 'retangulo', fundo: '#ffffff', raio: 0.06, sombra: true, italico: true, circuloMoeda: 'rgb(8,110,20)', circuloRaio: 0.24,
+              corMoeda: '#ffffff', corInteiro: 'rgb(8,110,20)', corCentavos: 'rgb(8,110,20)', corUnidade: 'rgb(8,110,20)',
+              unidade: 'sob-centavos', formatoUnidade: '{U}', centavosTamanho: 0.5, tamanhoInteiro: 1.0, linhaBase: 0.84,
+            },
+          },
+        },
+      },
+      {
+        area: { x: 375, y: 440, w: 433, h: 566 },
+        gapX: 0,
+        gapY: 0,
+        padrao: 4,
+        max: 8,
+        escalaMax: 1.3,
+        estilo: {
+          base: { w: 216, h: 283 },
+          foto: { x: 0.03, y: 0.1, w: 0.94, h: 0.62 },
+          nome: {
+            x: 0.03, y: 0.01, w: 0.94, h: 0.07,
+            estilo: { cor: '#ffffff', peso: 600, maiusculas: true, maxLinhas: 1, tamanhoMax: 13, tamanhoMin: 7 },
+          },
+          preco: {
+            x: 0.3, y: 0.76, w: 0.66, h: 0.225,
+            estilo: {
+              forma: 'retangulo', fundo: '#ffffff', raio: 0.06, sombra: true, italico: true, circuloMoeda: 'rgb(8,110,20)', circuloRaio: 0.24,
+              corMoeda: '#ffffff', corInteiro: 'rgb(8,110,20)', corCentavos: 'rgb(8,110,20)', corUnidade: 'rgb(8,110,20)',
+              unidade: 'sob-centavos', formatoUnidade: '{U}', centavosTamanho: 0.5, tamanhoInteiro: 1.0, linhaBase: 0.84,
+            },
+          },
+        },
+      },
+    ],
+    hasValidity: false,
+  },
+  {
+    kind: 'grade',
+    id: 'ofertas-hortifruti',
+    name: 'Ofertas Hortifrúti (9 produtos)',
+    src: ofertasHortifruti,
+    width: 736,
+    height: 1307,
+    // Painel branco dos produtos repintado (a frase das datas, embaixo, fica).
+    limpar: [
+      { tipo: 'cor', rect: { x: 44, y: 392, w: 648, h: 704 }, raio: 0, cor: '#ffffff' },
+      // Ponta das etiquetas da direita, que encostam na borda do painel.
+      { tipo: 'cor', rect: { x: 688, y: 568, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
+      { tipo: 'cor', rect: { x: 688, y: 800, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
+      { tipo: 'cor', rect: { x: 688, y: 1031, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
+    ],
+    grupos: [
+      {
+        area: { x: 40, y: 396, w: 656, h: 696 },
+        gapX: 4,
+        gapY: 2,
+        padrao: 9,
+        max: 15,
+        escalaMax: 1.5,
+        estilo: {
+          base: { w: 216, h: 231 },
+          foto: { x: 0.04, y: 0.19, w: 0.92, h: 0.55 },
+          nome: {
+            x: 0.03, y: 0.01, w: 0.94, h: 0.17,
+            estilo: { cor: 'rgb(62,78,28)', peso: 800, maiusculas: true, maxLinhas: 2, tamanhoMax: 16, tamanhoMin: 9 },
+          },
+          preco: {
+            x: 0.38, y: 0.755, w: 0.575, h: 0.23,
+            estilo: {
+              forma: 'retangulo', fundo: 'rgb(70,84,10)', raio: 0.14,
+              corMoeda: 'rgb(243,202,32)', corInteiro: 'rgb(243,202,32)', corCentavos: 'rgb(243,202,32)', corUnidade: 'rgb(243,202,32)',
+              unidade: 'sob-centavos', formatoUnidade: '{U}', moedaTamanho: 0.4, moedaSubir: 0.18, centavosTamanho: 0.5,
+              tamanhoInteiro: 0.86, linhaBase: 0.83,
+            },
+          },
+        },
+      },
+    ],
+    hasValidity: false,
+  },
 ];
+
+// "Black Friday Hortifrúti" (coluna verde): mesma arte do Semana do Hortifrúti, com o título
+// "BLACK FRIDAY" e os dados do Forte; mesmo layout e funcionalidades.
+{
+  const semana = PHOTO_TEMPLATES.find((t) => t.id === 'semana-do-hortifruti')!;
+  PHOTO_TEMPLATES.push({
+    ...semana,
+    id: 'black-friday-horti-coluna',
+    name: 'Black Friday Hortifrúti — coluna (3 + 4 produtos)',
+    src: blackFridayHortiColuna,
+  } as PhotoTemplate);
+}
 
 /** Título de cada produto no formulário (ex.: "Super oferta 1"); null = "Produto N". */
 export function titulosProdutos(t: PhotoTemplate, total: number, distribuir: (t: TemplateGrade, n: number) => number[]): (string | null)[] {

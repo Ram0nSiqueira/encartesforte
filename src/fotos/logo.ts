@@ -41,6 +41,22 @@ const LOCAIS: Record<string, LocalLogo[]> = {
     // Plaquinha branca com borda vermelha: o texto sai e a logo entra na plaquinha.
     { apagar: { tipo: 'cor', rect: { x: 826, y: 70, w: 238, h: 100 }, cor: '#ffffff', raio: 10 }, area: { x: 832, y: 76, w: 226, h: 88 } },
   ],
+  'black-friday-hortifruti': [
+    // Caixa branca com borda verde ("SUPERMERCADO FORTE" escrito): o texto sai, a borda fica.
+    { apagar: { tipo: 'cor', rect: { x: 74, y: 53, w: 295, h: 116 }, cor: '#ffffff', raio: 12 }, area: { x: 82, y: 60, w: 279, h: 102 } },
+  ],
+  'semana-do-hortifruti': [
+    // Caixa branca "LOGO SUPERMERCADO".
+    { apagar: { tipo: 'cor', rect: { x: 61, y: 53, w: 264, h: 74 }, cor: '#ffffff', raio: 6 }, area: { x: 66, y: 56, w: 254, h: 68 } },
+  ],
+  'black-friday-horti-coluna': [
+    // Caixa branca "SUPERMERCADO FORTE" (mesmo lugar do Semana do Hortifrúti).
+    { apagar: { tipo: 'cor', rect: { x: 61, y: 53, w: 264, h: 74 }, cor: '#ffffff', raio: 6 }, area: { x: 66, y: 56, w: 254, h: 68 } },
+  ],
+  'ofertas-hortifruti': [
+    // Moldura tracejada "SUALOGO".
+    { apagar: { tipo: 'bordas', rect: { x: 54, y: 77, w: 254, h: 74 } }, area: { x: 62, y: 84, w: 238, h: 60 } },
+  ],
 };
 
 export const temLogo = (id: string) => !!LOGO_SRC && !!LOCAIS[id];

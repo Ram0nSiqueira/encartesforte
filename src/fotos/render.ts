@@ -2,6 +2,7 @@ import { eraseRect } from '../produto/render';
 import type { Rect } from '../produto/template';
 import { loadImage, peekPhoto, preparePhoto, type PreparedPhoto } from './cutout';
 import { baseComLogo } from './logo';
+import { baseComContatos } from './contatos';
 import { baseComDatas, type Validade } from './datas';
 import type { Circle, EstiloCelula, EstiloPreco, Forma, PhotoTemplate, RelRect, TemplateGrade, FormaRestaurar } from './templates';
 
@@ -24,7 +25,10 @@ export interface RenderOptions {
 const MONT = "'Montserrat', Arial, sans-serif";
 
 export async function ensureFonts() {
-  await Promise.all([400, 500, 700, 800, 900].map((w) => document.fonts.load(`${w} 40px ${MONT}`)));
+  await Promise.all([
+    ...[400, 500, 700, 800, 900].map((w) => document.fonts.load(`${w} 40px ${MONT}`)),
+    document.fonts.load("400 40px 'Anton'").catch(() => null), // números de algumas etiquetas
+  ]);
 }
 
 const baseCache = new Map<string, Promise<HTMLImageElement>>();
@@ -762,6 +766,13 @@ function restaurar(
 
 /** Etiqueta de preço genérica (retângulo, pílula ou elipse), no estilo do modelo. */
 function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco, price: number, unit: string) {
+  if (e.baseSombra) {
+    // Faixa por baixo da etiqueta (efeito 3D).
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y + r.h * 0.07, r.w, r.h, (e.raio ?? 0.1) * r.h);
+    ctx.fillStyle = e.baseSombra;
+    ctx.fill();
+  }
   ctx.save();
   if (e.sombra) {
     ctx.shadowColor = 'rgba(0,0,0,0.3)';
@@ -782,39 +793,62 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
 
   const it = e.italico ? 'italic ' : '';
   const fonte = (peso: number, tam: number) => `${it}${peso} ${tam}px ${MONT}`;
+  // Fonte dos números (ex.: 'Anton', condensada); padrão: Montserrat 900.
+  const fonteNum = (tam: number) => (e.fonteNumero ? `${it}400 ${tam}px '${e.fonteNumero}', ${MONT}` : fonte(900, tam));
   const { int, cents } = splitPrice(price);
   const u = unit.trim();
   const textoUnidade = e.unidade === 'nenhuma' || !u ? '' : (e.formatoUnidade ?? '{U}').replace('{U}', u.toUpperCase()).replace('{u}', u);
   // Com círculo do "R$": o círculo ocupa a ponta esquerda e o valor fica no restante.
-  const circulo = e.circuloMoeda ? r.h * 0.5 : 0;
+  // Círculo do "R$": com `circuloRaio` menor, fica pequeno e "pendurado" na ponta esquerda.
+  const circulo = e.circuloMoeda ? r.h * (e.circuloRaio ?? 0.5) : 0;
+  const cxCirculo = e.circuloRaio ? r.x + circulo * 0.15 : r.x + circulo;
   if (e.circuloMoeda) {
     ctx.beginPath();
-    ctx.arc(r.x + circulo, r.y + r.h / 2, circulo, 0, Math.PI * 2);
+    ctx.arc(cxCirculo, r.y + r.h / 2, circulo, 0, Math.PI * 2);
     ctx.fillStyle = e.circuloMoeda;
     ctx.fill();
   }
-  const areaX = r.x + circulo * 2;
-  const areaW = r.w - circulo * 2;
+  // Bloco colorido na ponta esquerda, com o "R$" dentro.
+  const bloco = e.blocoMoeda ? r.w * e.blocoMoeda.largura : e.circuloRaio ? circulo * 1.25 : circulo * 2;
+  if (e.blocoMoeda) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, (e.raio ?? 0.1) * r.h);
+    ctx.clip();
+    ctx.fillStyle = e.blocoMoeda.cor;
+    ctx.fillRect(r.x, r.y, bloco, r.h);
+    let t = r.h * 0.3;
+    ctx.font = fonte(900, t);
+    while (ctx.measureText('R$').width > bloco * 0.78 && t > 5) { t -= 0.25; ctx.font = fonte(900, t); }
+    ctx.fillStyle = e.corMoeda;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('R$', r.x + bloco / 2, r.y + r.h / 2 + t * 0.36);
+    ctx.restore();
+  }
+  const comBloco = !!(e.circuloMoeda || e.blocoMoeda);
+  const areaX = r.x + bloco;
+  const areaW = r.w - bloco;
   // Largura útil (elipse/pílula têm menos espaço nas pontas).
-  const util = e.circuloMoeda
+  const util = comBloco
     ? areaW * 0.86
     : r.w * (e.forma === 'elipse' ? 0.72 : e.forma === 'pilula' ? 0.84 : 0.88);
 
   let big = r.h * e.tamanhoInteiro;
   const tc = e.centavosTamanho ?? 0.5;
   const medir = () => {
-    ctx.font = fonte(800, big * (e.moedaTamanho ?? 0.5)); const wm = e.circuloMoeda || e.semMoeda ? 0 : ctx.measureText('R$').width;
-    ctx.font = fonte(900, big); const wi = ctx.measureText(int).width;
-    ctx.font = fonte(900, big * tc); const wc = ctx.measureText(`,${cents}`).width;
+    ctx.font = fonte(800, big * (e.moedaTamanho ?? 0.5)); const wm = comBloco || e.semMoeda ? 0 : ctx.measureText('R$').width;
+    ctx.font = fonteNum(big); const wi = ctx.measureText(int).width;
+    ctx.font = fonteNum(big * tc); const wc = ctx.measureText(`,${cents}`).width;
     ctx.font = fonte(800, big * 0.32); const wu = e.unidade === 'sob-centavos' && textoUnidade ? ctx.measureText(textoUnidade).width : 0;
-    const gap = e.circuloMoeda || e.semMoeda ? 0 : big * (e.moedaTamanho ?? 0.5) * 0.2;
+    const gap = comBloco || e.semMoeda ? 0 : big * (e.moedaTamanho ?? 0.5) * 0.2;
     return { wm, wi, wc, gap, total: wm + gap + wi + Math.max(wc, wu) };
   };
   let m = medir();
   while (m.total > util && big > 6) { big -= 0.5; m = medir(); }
 
   const base = r.y + r.h * e.linhaBase;
-  let x = e.circuloMoeda ? areaX + (areaW - m.total) / 2 : r.x + (r.w - m.total) / 2;
+  let x = comBloco ? areaX + (areaW - m.total) / 2 : r.x + (r.w - m.total) / 2;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   if (e.circuloMoeda) {
@@ -824,14 +858,14 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
     while (ctx.measureText('R$').width > circulo * 1.5 && t > 5) { t -= 0.25; ctx.font = fonte(800, t); }
     ctx.fillStyle = e.corMoeda;
     ctx.textAlign = 'center';
-    ctx.fillText('R$', r.x + circulo, r.y + r.h / 2 + t * 0.36);
+    ctx.fillText('R$', cxCirculo, r.y + r.h / 2 + t * 0.36);
     ctx.textAlign = 'left';
-  } else if (!e.semMoeda) {
+  } else if (!e.semMoeda && !e.blocoMoeda) {
     ctx.font = fonte(800, big * (e.moedaTamanho ?? 0.5)); ctx.fillStyle = e.corMoeda; ctx.fillText('R$', x, base - big * (e.moedaSubir ?? 0.28)); x += m.wm + m.gap;
   }
-  ctx.font = fonte(900, big); ctx.fillStyle = e.corInteiro; ctx.fillText(int, x, base); x += m.wi;
+  ctx.font = fonteNum(big); ctx.fillStyle = e.corInteiro; ctx.fillText(int, x, base); x += m.wi;
   const topoInt = base - big * 0.72;
-  ctx.font = fonte(900, big * tc); ctx.fillStyle = e.corCentavos;
+  ctx.font = fonteNum(big * tc); ctx.fillStyle = e.corCentavos;
   // Centavos elevados (alinhados ao topo do número) ou na linha de base.
   ctx.fillText(`,${cents}`, x, e.centavosNaBase || tc >= 1 ? base : topoInt + big * tc * 0.72);
   if (e.unidade === 'sob-centavos' && textoUnidade) {
@@ -1025,16 +1059,41 @@ function desenharCelula(
     ctx.restore();
   }
   if (est.fundoFoto) {
-    const f = rel(cel, est.fundoFoto.rect);
+    const ff = est.fundoFoto;
+    const f = rel(cel, ff.rect);
+    const rr = ff.raio * k;
     ctx.beginPath();
-    ctx.roundRect(f.x, f.y, f.w, f.h, est.fundoFoto.raio * k);
-    ctx.fillStyle = est.fundoFoto.cor;
+    ctx.roundRect(f.x, f.y, f.w, f.h, ff.cantos === 'topo' ? [rr, rr, 0, 0] : rr);
+    if (ff.radial) {
+      // Brilho no centro, escurecendo para as bordas.
+      const g = ctx.createRadialGradient(f.x + f.w / 2, f.y + f.h * 0.45, 0, f.x + f.w / 2, f.y + f.h * 0.45, Math.max(f.w, f.h) * 0.62);
+      g.addColorStop(0, ff.radial[0]);
+      g.addColorStop(1, ff.radial[1]);
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = ff.cor;
     ctx.fill();
   }
   if (!p) return;
 
   if (photo) {
     drawPhoto(ctx, photo, rel(cel, est.foto), { frameRadius: 14 * k, frameBorder: '#ffffff', align: 'center' });
+  }
+  if (est.selo) {
+    // Selo (ex.: "BLACK") no canto do card.
+    const sr = rel(cel, est.selo.rect);
+    ctx.beginPath();
+    ctx.roundRect(sr.x, sr.y, sr.w, sr.h, sr.h / 2);
+    ctx.fillStyle = est.selo.fundo;
+    ctx.fill();
+    let t = sr.h * 0.5;
+    ctx.font = `900 ${t}px ${MONT}`;
+    ctx.letterSpacing = `${t * 0.08}px`;
+    while (ctx.measureText(est.selo.texto).width > sr.w * 0.8 && t > 5) { t -= 0.25; ctx.font = `900 ${t}px ${MONT}`; ctx.letterSpacing = `${t * 0.08}px`; }
+    ctx.fillStyle = est.selo.cor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(est.selo.texto, sr.x + sr.w / 2, sr.y + sr.h / 2 + t * 0.36);
+    ctx.letterSpacing = '0px';
   }
 
   const nome = p.name.trim();
@@ -1333,7 +1392,9 @@ export async function renderPhotoTemplate(
 ): Promise<{ pending: Promise<unknown>[] }> {
   const [original, { photos, pending }] = await Promise.all([loadBase(t.src), loadPhotos(products, waitForPhotos)]);
   // Logo da empresa no lugar de "SEU LOGO" / nome do mercado escrito na arte.
-  const comLogo = await baseComLogo(t.id, original, t.width, t.height);
+  const comLogo0 = await baseComLogo(t.id, original, t.width, t.height);
+  // Contatos certos do Forte no lugar dos dados de exemplo da arte.
+  const comLogo = await baseComContatos(t.id, comLogo0, t.width, t.height);
   // Datas de validade escritas na arte.
   const base = await baseComDatas(t.id, comLogo, t.width, t.height, opts.validade);
   canvas.width = t.width;
