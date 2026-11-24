@@ -3,7 +3,7 @@ import type { Rect } from '../produto/template';
 import { loadImage, peekPhoto, preparePhoto, type PreparedPhoto } from './cutout';
 import { baseComLogo } from './logo';
 import { baseComDatas, type Validade } from './datas';
-import type { Circle, EstiloCelula, EstiloPreco, Forma, PhotoTemplate, RelRect, TemplateGrade } from './templates';
+import type { Circle, EstiloCelula, EstiloPreco, Forma, PhotoTemplate, RelRect, TemplateGrade, FormaRestaurar } from './templates';
 
 export interface PhotoProductData {
   name: string;
@@ -713,14 +713,48 @@ const cruza = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < 
  */
 function restaurar(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
-  formas?: (Forma & { manterSobCards?: boolean })[], evitar: Rect[] = [],
+  formas: FormaRestaurar[] | undefined, padrao: boolean, evitar: Rect[] = [],
 ) {
   for (const f of formas ?? []) {
+    if ((f.quando === 'padrao' && !padrao) || (f.quando === 'outros' && padrao)) continue;
     const caixa = caixaDaForma(f);
     if (!f.manterSobCards && evitar.some((c) => cruza(c, caixa))) continue;
+    if (f.tipo === 'circulo' && f.exceto?.length && f.esfumar) {
+      // Recorte com borda esfumada (a decoração some suavemente onde ficava o card original).
+      const c = caixaDaForma(f);
+      const off = document.createElement('canvas');
+      off.width = Math.ceil(c.w); off.height = Math.ceil(c.h);
+      const o = off.getContext('2d')!;
+      o.translate(-c.x, -c.y);
+      o.drawImage(base, 0, 0, t.width, t.height);
+      // Borda do círculo também esfumada.
+      const rg = o.createRadialGradient(f.cx, f.cy, Math.max(0, f.r - f.esfumar * 1.5), f.cx, f.cy, f.r);
+      rg.addColorStop(0, 'rgba(0,0,0,1)');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      o.globalCompositeOperation = 'destination-in';
+      o.fillStyle = rg;
+      o.fillRect(c.x, c.y, c.w, c.h);
+      o.globalCompositeOperation = 'destination-out';
+      o.filter = `blur(${f.esfumar}px)`;
+      o.fillStyle = '#000';
+      for (const r of f.exceto) {
+        const m = f.esfumar * 0.6;
+        o.beginPath();
+        o.roundRect(r.x - m, r.y - m, r.w + m * 2, r.h + m * 2, (r.raio ?? 0) + m);
+        o.fill();
+      }
+      ctx.drawImage(off, c.x, c.y);
+      continue;
+    }
     ctx.save();
     caminhoForma(ctx, f);
     ctx.clip();
+    if (f.tipo === 'circulo' && f.exceto?.length) {
+      ctx.beginPath();
+      ctx.rect(0, 0, t.width, t.height);
+      for (const r of f.exceto) ctx.roundRect(r.x, r.y, r.w, r.h, r.raio ?? 0);
+      ctx.clip('evenodd');
+    }
     ctx.drawImage(base, 0, 0, t.width, t.height);
     ctx.restore();
   }
@@ -769,11 +803,11 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
   let big = r.h * e.tamanhoInteiro;
   const tc = e.centavosTamanho ?? 0.5;
   const medir = () => {
-    ctx.font = fonte(800, big * 0.5); const wm = e.circuloMoeda || e.semMoeda ? 0 : ctx.measureText('R$').width;
+    ctx.font = fonte(800, big * (e.moedaTamanho ?? 0.5)); const wm = e.circuloMoeda || e.semMoeda ? 0 : ctx.measureText('R$').width;
     ctx.font = fonte(900, big); const wi = ctx.measureText(int).width;
     ctx.font = fonte(900, big * tc); const wc = ctx.measureText(`,${cents}`).width;
     ctx.font = fonte(800, big * 0.32); const wu = e.unidade === 'sob-centavos' && textoUnidade ? ctx.measureText(textoUnidade).width : 0;
-    const gap = e.circuloMoeda || e.semMoeda ? 0 : big * 0.1;
+    const gap = e.circuloMoeda || e.semMoeda ? 0 : big * (e.moedaTamanho ?? 0.5) * 0.2;
     return { wm, wi, wc, gap, total: wm + gap + wi + Math.max(wc, wu) };
   };
   let m = medir();
@@ -793,7 +827,7 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
     ctx.fillText('R$', r.x + circulo, r.y + r.h / 2 + t * 0.36);
     ctx.textAlign = 'left';
   } else if (!e.semMoeda) {
-    ctx.font = fonte(800, big * 0.5); ctx.fillStyle = e.corMoeda; ctx.fillText('R$', x, base - big * 0.28); x += m.wm + m.gap;
+    ctx.font = fonte(800, big * (e.moedaTamanho ?? 0.5)); ctx.fillStyle = e.corMoeda; ctx.fillText('R$', x, base - big * (e.moedaSubir ?? 0.28)); x += m.wm + m.gap;
   }
   ctx.font = fonte(900, big); ctx.fillStyle = e.corInteiro; ctx.fillText(int, x, base); x += m.wi;
   const topoInt = base - big * 0.72;
@@ -823,6 +857,129 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
   }
 }
 
+/**
+ * Plaquinha de madeira (tábua arredondada com veios e cordinhas nas pontas) atrás do nome.
+ * Devolve a área interna onde o texto deve caber.
+ */
+function desenharPlaca(ctx: CanvasRenderingContext2D, r: Rect, c: { cor: string; escura: string; clara: string; corda: string }, k: number): Rect {
+  const corda = Math.min(r.w * 0.05, 14 * k);
+  const x = r.x + corda, w = r.w - corda * 2, y = r.y, h = r.h;
+  ctx.save();
+  // Cordinhas (atrás da tábua), duas de cada lado.
+  ctx.strokeStyle = c.corda;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1.5, h * 0.07);
+  for (const fy of [0.32, 0.68]) {
+    for (const [x0, x1] of [[r.x + corda * 0.2, x + corda * 0.9], [x + w - corda * 0.9, r.x + r.w - corda * 0.2]]) {
+      ctx.beginPath();
+      ctx.moveTo(x0, y + h * fy);
+      ctx.lineTo(x1, y + h * fy);
+      ctx.stroke();
+    }
+  }
+  // Tábua.
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = h * 0.18;
+  ctx.shadowOffsetY = h * 0.06;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, h * 0.16);
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, c.clara);
+  g.addColorStop(0.18, c.cor);
+  g.addColorStop(1, c.escura);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.clip();
+  // Veios da madeira (sempre iguais para o mesmo tamanho).
+  ctx.strokeStyle = 'rgba(30,35,5,0.35)';
+  ctx.lineWidth = Math.max(0.6, h * 0.018);
+  for (let j = 1; j <= 5; j++) {
+    const yy = y + (h * j) / 6 + Math.sin(j * 2.3) * h * 0.03;
+    ctx.beginPath();
+    ctx.moveTo(x, yy);
+    for (let xx = 0; xx <= w; xx += w / 12) ctx.lineTo(x + xx, yy + Math.sin(xx / (w / 6) + j) * h * 0.02);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Borda clara em cima, como luz batendo na tábua.
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x + 1, y + 1, w - 2, h - 2, h * 0.16);
+  ctx.strokeStyle = 'rgba(210,230,120,0.35)';
+  ctx.lineWidth = Math.max(1, h * 0.03);
+  ctx.stroke();
+  ctx.restore();
+  const pad = h * 0.18;
+  return { x: x + pad, y: y + h * 0.08, w: w - pad * 2, h: h * 0.84 };
+}
+
+/** Altura da curva em x: pontos ligados com interpolação suave (cosseno). */
+function alturaCurva(pts: [number, number][], x: number) {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    if (x <= x1) {
+      const u = (x - x0) / (x1 - x0);
+      return y0 + (y1 - y0) * (1 - Math.cos(Math.PI * u)) / 2;
+    }
+  }
+  return pts[pts.length - 1][1];
+}
+
+/**
+ * Fundo com duas regiões separadas por uma curva: acima, a textura de um trecho limpo da
+ * imagem original (espelhada para não ter emendas); abaixo, cor lisa. Bordas da área se
+ * misturam com a imagem original.
+ */
+function limparCurva(
+  ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
+  l: Extract<TemplateGrade['limpar'][number], { tipo: 'curva' }>,
+) {
+  const src = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+  src.canvas.width = t.width;
+  src.canvas.height = t.height;
+  src.drawImage(base, 0, 0, t.width, t.height);
+  const q = l.acima;
+  const tex = src.getImageData(q.x, q.y, q.w, q.h).data;
+  const r = l.rect;
+  const area = ctx.getImageData(r.x, r.y, r.w, r.h);
+  const fora = parseRgb(l.abaixo);
+  const s = l.suavizar;
+  const curva = Array.from({ length: r.w }, (_, x) => alturaCurva(l.curva, r.x + x));
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      const X = r.x + x, Y = r.y + y;
+      // Textura espelhada a cada repetição.
+      const ox = X - q.x, oy = Y - q.y;
+      const rx = ((ox % (2 * q.w)) + 2 * q.w) % (2 * q.w), ry = ((oy % (2 * q.h)) + 2 * q.h) % (2 * q.h);
+      const tx = rx < q.w ? rx : 2 * q.w - 1 - rx, ty = ry < q.h ? ry : 2 * q.h - 1 - ry;
+      const ti = (ty * q.w + tx) * 4;
+      // Mistura acima/abaixo na curva (anti-serrilhado).
+      const d = Y - curva[x];
+      const wf = Math.min(1, Math.max(0, d / 1.5 + 0.5));
+      // Mistura com a imagem original perto das bordas da área.
+      const borda = Math.min(x, y, r.w - 1 - x, r.h - 1 - y);
+      const wn = Math.min(1, borda / s);
+      const i = (y * r.w + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const novo = tex[ti + c] * (1 - wf) + fora[c] * wf;
+        area.data[i + c] = area.data[i + c] * (1 - wn) + novo * wn;
+      }
+    }
+  }
+  ctx.putImageData(area, r.x, r.y);
+}
+
+function parseRgb(cor: string): [number, number, number] {
+  const m = cor.match(/\d+(\.\d+)?/g)?.map(Number);
+  if (cor.startsWith('#')) {
+    const h = cor.slice(1);
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+  }
+  return [m?.[0] ?? 0, m?.[1] ?? 0, m?.[2] ?? 0];
+}
+
 function desenharCelula(
   ctx: CanvasRenderingContext2D, cel: Rect, k: number, est: EstiloCelula,
   p: PhotoProductData | undefined, photo: PreparedPhoto | null,
@@ -830,10 +987,24 @@ function desenharCelula(
   if (est.caixa) {
     const c = rel(cel, est.caixa.rect);
     ctx.save();
+    if (est.caixa.sombra) {
+      ctx.shadowColor = 'rgba(0,0,0,0.28)';
+      ctx.shadowBlur = 22 * k;
+      ctx.shadowOffsetY = 8 * k;
+    }
     ctx.beginPath();
     ctx.roundRect(c.x, c.y, c.w, c.h, est.caixa.raio * k);
     ctx.fillStyle = p?.cardColor || est.caixa.fundo;
     ctx.fill();
+    ctx.shadowColor = 'transparent';
+    if (est.caixa.pontos) {
+      ctx.fillStyle = est.caixa.pontos;
+      for (let j = 0; j < 3; j++) {
+        ctx.beginPath();
+        ctx.arc(c.x + 30 * k + j * 12 * k, c.y + 22 * k, 4 * k, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     if (est.caixa.borda) {
       ctx.strokeStyle = est.caixa.borda;
       ctx.lineWidth = (est.caixa.larguraBorda ?? 2) * Math.max(k, 0.5);
@@ -869,7 +1040,8 @@ function desenharCelula(
   const nome = p.name.trim();
   if (nome) {
     const s = est.nome.estilo;
-    const r = rel(cel, est.nome);
+    let r = rel(cel, est.nome);
+    if (s.placa) r = desenharPlaca(ctx, r, s.placa, k);
     const texto = (s.prefixo ?? '') + (s.maiusculas ? nome.toUpperCase() : nome);
     const peso = s.peso;
     const it = s.italico ? 'italic ' : '';
@@ -1115,6 +1287,7 @@ function drawGrade(
       if (tile && l.textura) somarTextura(ctx, l.rect, tile, l.textura);
     }
     else if (l.tipo === 'colunas') limparPorColunas(ctx, base, t, l);
+    else if (l.tipo === 'curva') limparCurva(ctx, base, t, l);
     else {
       ctx.fillStyle = l.cor;
       ctx.beginPath();
@@ -1136,7 +1309,9 @@ function drawGrade(
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     }),
   );
-  restaurar(ctx, base, t, t.restaurarAntes, ocupadas);
+  // Layout original da arte (mesma quantidade de cards): decorações exatamente como no original.
+  const padrao = t.grupos.every((g, gi) => qtd[gi] === g.padrao);
+  restaurar(ctx, base, t, t.restaurarAntes, padrao, ocupadas);
 
   let inicio = 0;
   t.grupos.forEach((g, gi) => {
@@ -1145,7 +1320,7 @@ function drawGrade(
     inicio += qtd[gi];
   });
 
-  restaurar(ctx, base, t, t.restaurarDepois);
+  restaurar(ctx, base, t, t.restaurarDepois, padrao);
 }
 
 /**

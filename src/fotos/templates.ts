@@ -7,6 +7,7 @@ import semanaDoCliente from '../../ImagemEnarteVertical/final (1).jpg';
 import fimDeAno from '../../ImagemEnarteVertical/final2.jpg';
 import fimDeSemanaImbativel from '../../ImagemEnarteVertical/teste.jpg';
 import ofertasDeBebidas from '../../ImagemEnarteVertical/teste02.jpg';
+import blackFruti from '../../ImagemEnarteVertical/10643735.jpg';
 import type { EraseRect, Rect } from '../produto/template';
 
 export interface Circle { cx: number; cy: number; r: number }
@@ -91,6 +92,8 @@ export interface EstiloNome {
   sombra?: string;
   /** Alinhamento do texto (padrão: centro). */
   alinhar?: 'centro' | 'esquerda';
+  /** Plaquinha de madeira desenhada atrás do nome (com cordinhas nas pontas). */
+  placa?: { cor: string; escura: string; clara: string; corda: string };
 }
 
 export interface EstiloPreco {
@@ -107,6 +110,9 @@ export interface EstiloPreco {
   circuloMoeda?: string;
   /** Não mostrar "R$" (só o valor), como em alguns modelos. */
   semMoeda?: boolean;
+  /** "R$" ao lado do número: tamanho e altura em fração do número (padrão 0.5 e 0.28). */
+  moedaTamanho?: number;
+  moedaSubir?: number;
   corMoeda: string;
   corInteiro: string;
   corCentavos: string;
@@ -130,7 +136,13 @@ export interface EstiloCelula {
   /** Tamanho da célula no layout original (px). */
   base: { w: number; h: number };
   /** Caixa desenhada atrás do produto (opcional). A "Cor do card" muda o preenchimento. */
-  caixa?: { fundo: string; borda?: string; larguraBorda?: number; raio: number; rect: RelRect };
+  caixa?: {
+    fundo: string; borda?: string; larguraBorda?: number; raio: number; rect: RelRect;
+    /** Sombra suave embaixo do card. */
+    sombra?: boolean;
+    /** Três pontinhos no canto superior esquerdo (como um "menu"). */
+    pontos?: string;
+  };
   foto: RelRect;
   /** Fundo atrás da foto (ex.: quadro branco dentro de um card colorido). */
   fundoFoto?: { cor: string; raio: number; rect: RelRect };
@@ -142,6 +154,12 @@ export type Limpeza =
   /** `textura`: trecho limpo (tamanho múltiplo do padrão) cuja textura fina é devolvida à área. */
   | { tipo: 'coons'; rect: EraseRect; textura?: Rect }
   | { tipo: 'cor'; rect: Rect; raio: number; cor: string }
+  /**
+   * Fundo com duas regiões separadas por uma curva (pontos x,y medidos na arte, ligados de forma
+   * suave): acima, a textura de um trecho limpo da imagem (repetida espelhada); abaixo, uma cor
+   * lisa. As bordas da área se misturam suavemente com a imagem original (`suavizar` px).
+   */
+  | { tipo: 'curva'; rect: Rect; curva: [number, number][]; acima: Rect; abaixo: string; suavizar: number }
   /**
    * Fundo em degradê refeito a partir de colunas de referência: cada coluna é amostrada
    * inteira (sem `pontos`) ou só nas alturas livres indicadas em `pontos`; entre as colunas,
@@ -163,7 +181,14 @@ export type Limpeza =
 export type Forma =
   | { tipo: 'rect'; rect: Rect }
   | { tipo: 'poligono'; pontos: [number, number][] }
-  | { tipo: 'circulo'; cx: number; cy: number; r: number };
+  /** `exceto`: partes do círculo que NÃO voltam (ex.: onde ficava um card da arte original). */
+  | { tipo: 'circulo'; cx: number; cy: number; r: number; exceto?: (Rect & { raio?: number })[]; esfumar?: number };
+
+/**
+ * Parte da arte original que volta por cima da limpeza. `quando`: só no layout original
+ * ('padrao', mesma quantidade de cards da arte) ou só nos outros ('outros').
+ */
+export type FormaRestaurar = Forma & { manterSobCards?: boolean; quando?: 'padrao' | 'outros' };
 
 export interface GrupoGrade {
   /** Título mostrado no formulário (ex.: "Super oferta"); vazio = "Produto N". */
@@ -195,9 +220,9 @@ export interface TemplateGrade {
    * Por padrão, uma decoração que ficaria embaixo de um card é omitida; com `manterSobCards`
    * ela sempre volta (o card fica por cima, como no original).
    */
-  restaurarAntes?: (Forma & { manterSobCards?: boolean })[];
+  restaurarAntes?: FormaRestaurar[];
   /** Partes da imagem original que voltam por cima de tudo (ex.: título que sobrepõe os produtos). */
-  restaurarDepois?: Forma[];
+  restaurarDepois?: FormaRestaurar[];
   /**
    * Formas redesenhadas depois da limpeza (ex.: a ponta de um selo que ficava escondida atrás
    * dos produtos). `pontos` é a linha central da borda; o interior é preenchido com uma cor ou
@@ -677,6 +702,75 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
               corMoeda: 'rgb(168,30,17)', corInteiro: 'rgb(168,30,17)', corCentavos: 'rgb(168,30,17)', corUnidade: 'rgb(168,30,17)',
               unidade: 'abaixo', formatoUnidade: '{U}', tamanhoUnidade: 0.16, centavosTamanho: 1,
               tamanhoInteiro: 0.66, linhaBase: 0.68,
+            },
+          },
+        },
+      },
+    ],
+    hasValidity: false,
+  },
+  {
+    kind: 'grade',
+    id: 'black-fruti',
+    name: 'Black Fruti — Hortifrúti (2 produtos)',
+    src: blackFruti,
+    width: 1080,
+    height: 1080,
+    // Fundo atrás dos cards refeito: estampa clara de frutas acima da curva e verde liso abaixo.
+    limpar: [
+      {
+        tipo: 'curva',
+        rect: { x: 148, y: 296, w: 790, h: 584 },
+        curva: [[0, 607], [180, 703], [400, 776], [541, 805], [700, 815], [850, 800], [950, 700], [1000, 570], [1030, 460], [1070, 352]],
+        acima: { x: 0, y: 0, w: 300, h: 260 },
+        abaixo: 'rgb(150,223,2)',
+        suavizar: 22,
+      },
+    ],
+    // Maçãs desfocadas das laterais. Com 2 produtos (layout original) ficam na frente dos cards,
+    // como na arte; com outra quantidade, ficam atrás (só a parte que estava fora dos cards).
+    restaurarAntes: [
+      { tipo: 'circulo', cx: 186, cy: 816, r: 82, exceto: [{ x: 195, y: 316, w: 340, h: 503, raio: 24 }], esfumar: 14, manterSobCards: true },
+      { tipo: 'circulo', cx: 966, cy: 670, r: 142, exceto: [{ x: 548, y: 316, w: 340, h: 503, raio: 24 }], esfumar: 14, manterSobCards: true },
+    ],
+    // Parte de baixo do título "BLACK FRUTI", que fica por cima dos cards.
+    restaurarDepois: [
+      {
+        tipo: 'poligono',
+        pontos: [[312, 290], [752, 290], [750, 322], [738, 344], [716, 358], [362, 360], [334, 350], [318, 332]],
+      },
+      { tipo: 'circulo', cx: 186, cy: 816, r: 72, quando: 'padrao' },
+      { tipo: 'circulo', cx: 966, cy: 670, r: 118, quando: 'padrao' },
+    ],
+    grupos: [
+      {
+        area: { x: 195, y: 316, w: 693, h: 502 },
+        gapX: 13,
+        gapY: 14,
+        padrao: 2,
+        max: 8,
+        escalaMax: 1.15,
+        estilo: {
+          base: { w: 340, h: 502 },
+          caixa: { fundo: '#95dd00', raio: 24, rect: { x: 0, y: 0, w: 1, h: 1 }, sombra: true, pontos: '#ffffff' },
+          // Parte preta de baixo do card.
+          fundoFoto: { cor: '#1b1b1b', raio: 24, rect: { x: 0, y: 0.466, w: 1, h: 0.534 } },
+          foto: { x: 0.06, y: 0.085, w: 0.88, h: 0.47 },
+          nome: {
+            x: 0.05, y: 0.535, w: 0.9, h: 0.13,
+            estilo: {
+              cor: '#f4f4f4', peso: 800, maxLinhas: 2, tamanhoMax: 24, tamanhoMin: 10, sombra: 'rgba(0,0,0,0.55)',
+              placa: { cor: '#5f6b1c', escura: '#3f4810', clara: '#8a9a33', corda: '#b9cc5a' },
+            },
+          },
+          preco: {
+            x: 0.12, y: 0.68, w: 0.76, h: 0.27,
+            estilo: {
+              forma: 'retangulo', fundo: 'rgba(0,0,0,0)',
+              corMoeda: '#9be000', corInteiro: '#9be000', corCentavos: '#9be000', corUnidade: '#9be000',
+              unidade: 'sob-centavos', formatoUnidade: '{u}', centavosTamanho: 0.42,
+              moedaTamanho: 0.27, moedaSubir: 0.1,
+              tamanhoInteiro: 1.15, linhaBase: 0.86,
             },
           },
         },
