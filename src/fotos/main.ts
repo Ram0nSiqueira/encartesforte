@@ -8,7 +8,7 @@ import './fotos.css';
 import { fileToDataUrl, IMAGE_ACCEPT } from '../editor/image';
 import { parseBRNumber } from '../editor/parser';
 import { bancoConfigurado, buscarFotoPrincipal, esquecerFotoPrincipal, PREFIXO_IMAGENS, salvarFotoPrincipal } from './api';
-import { distribuirGrupos, ensureFonts, renderPhotoTemplate } from './render';
+import { distribuirGrupos, ensureFonts, renderPhotoTemplate, type TamanhoNome } from './render';
 import { temDatas } from './datas';
 // Fontes usadas nas datas escritas nas artes.
 import '@fontsource/anton/latin-400.css';
@@ -106,8 +106,15 @@ interface State {
   squareColor: string;
   /** Quantidade de cards nos modelos que permitem adicionar/remover cards. */
   cardCounts: Record<string, number>;
+  /** Tamanho do nome dos produtos: P/M/G/GG (escala sobre o modelo) ou px exato. */
+  nameSize: NomeModo;
+  /** Tamanho em px escolhido em cada modelo (cada arte tem uma resolução). */
+  namePx: Record<string, number>;
   products: ProductState[];
 }
+
+type NomeModo = 'p' | 'm' | 'g' | 'gg' | 'px';
+const ESCALAS_NOME: Record<Exclude<NomeModo, 'px'>, number> = { p: 0.8, m: 1, g: 1.35, gg: 1.7 };
 
 const STORAGE_KEY = 'encartesforte:encarte-fotos-v2';
 const MAX_PRODUCTS = Math.max(...PHOTO_TEMPLATES.map(slotCount));
@@ -135,6 +142,8 @@ function defaultState(): State {
     squareMode: 'todos',
     squareColor: '',
     cardCounts: {},
+    nameSize: 'm',
+    namePx: {},
     products: Array.from({ length: MAX_PRODUCTS }, (_, i) => novoProduto(...(names[i] ?? []))),
   };
 }
@@ -151,6 +160,8 @@ function loadState(): State {
       untilStock: saved.untilStock ?? d.untilStock,
       squareMode: saved.squareMode ?? d.squareMode,
       squareColor: saved.squareColor ?? d.squareColor,
+      nameSize: saved.nameSize ?? d.nameSize,
+      namePx: saved.namePx ?? d.namePx,
       // Versão anterior guardava uma quantidade só (do modelo "De Olho nas Ofertas").
       cardCounts:
         saved.cardCounts ??
@@ -246,11 +257,13 @@ async function render(waitForPhotos = false) {
     cardColor: state.squareMode === 'todos' ? state.squareColor : p.cardColor,
   }));
   const tmp = document.createElement('canvas');
-  const { pending } = await renderPhotoTemplate(tmp, t, data, {
+  const { pending, tamanhoNome } = await renderPhotoTemplate(tmp, t, data, {
       validity: state.validity,
       validade: { inicio: state.validityStart, fim: state.validity, estoque: state.untilStock },
+      nome: tamanhoNomeAtual(t),
     }, waitForPhotos);
   if (ticket !== renderTicket) return;
+  mostrarTamanhoNome(t, tamanhoNome);
   canvas.width = tmp.width;
   canvas.height = tmp.height;
   canvas.getContext('2d')!.drawImage(tmp, 0, 0);
@@ -280,10 +293,77 @@ for (const t of PHOTO_TEMPLATES) {
     save();
     if (state.products.length !== antes) montarProdutos();
     syncTemplateUI();
+    syncTamanhoNomeUI();
     scheduleRender();
   });
   modelList.appendChild(label);
 }
+
+// ---------------------------------------------------------------------------
+// Tamanho do nome dos produtos
+// ---------------------------------------------------------------------------
+const tamNomeRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="tamNome"]')];
+const tamNomePxBox = $('tamNomePxBox');
+const tamNomePx = $<HTMLInputElement>('tamNomePx');
+const tamNomePxNum = $<HTMLInputElement>('tamNomePxNum');
+const tamNomeInfo = $('tamNomeInfo');
+/** Último tamanho de nome desenhado (px), para começar o "Personalizado" a partir dele. */
+let ultimoTamanhoNome = 0;
+
+/** Limite do controle em px: proporcional ao tamanho da arte (cada modelo tem uma resolução). */
+const maxPxNome = (t: PhotoTemplate) => Math.max(40, Math.round(t.width * 0.07));
+
+function tamanhoNomeAtual(t: PhotoTemplate): TamanhoNome {
+  if (state.nameSize === 'px') {
+    const px = state.namePx[t.id];
+    if (px) return { modo: 'px', px };
+    return { modo: 'escala', escala: 1 };
+  }
+  return { modo: 'escala', escala: ESCALAS_NOME[state.nameSize] };
+}
+
+function mostrarTamanhoNome(t: PhotoTemplate, px: number) {
+  if (px) ultimoTamanhoNome = px;
+  const base = `imagem final de ${t.width} × ${t.height} px`;
+  tamNomeInfo.textContent = px
+    ? `Maior nome no encarte: ${px} px (${base}). Nomes longos diminuem um pouco para caber.`
+    : `Digite o nome dos produtos para ver o tamanho (${base}).`;
+}
+
+function syncTamanhoNomeUI() {
+  const t = template();
+  tamNomeRadios.forEach((r) => (r.checked = r.value === state.nameSize));
+  const px = state.nameSize === 'px';
+  tamNomePxBox.hidden = !px;
+  const max = maxPxNome(t);
+  tamNomePx.max = String(max);
+  tamNomePxNum.max = String(max * 2);
+  const v = state.namePx[t.id] ?? Math.max(6, ultimoTamanhoNome || Math.round(max / 3));
+  tamNomePx.value = String(Math.min(v, max));
+  tamNomePxNum.value = String(v);
+}
+
+tamNomeRadios.forEach((r) =>
+  r.addEventListener('change', () => {
+    state.nameSize = r.value as NomeModo;
+    // Personalizado começa no tamanho que está aparecendo agora.
+    const t = template();
+    if (state.nameSize === 'px' && !state.namePx[t.id]) state.namePx[t.id] = Math.max(6, ultimoTamanhoNome || Math.round(maxPxNome(t) / 3));
+    save();
+    syncTamanhoNomeUI();
+    scheduleRender();
+  }),
+);
+const definirPx = (v: number) => {
+  if (!Number.isFinite(v) || v < 6) return;
+  state.namePx[template().id] = Math.round(v);
+  save();
+  syncTamanhoNomeUI();
+  scheduleRender();
+};
+tamNomePx.addEventListener('input', () => definirPx(Number(tamNomePx.value)));
+tamNomePxNum.addEventListener('change', () => definirPx(Number(tamNomePxNum.value)));
+syncTamanhoNomeUI();
 
 validityInput.value = state.validity;
 validityInput.addEventListener('input', () => {

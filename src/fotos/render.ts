@@ -20,7 +20,27 @@ export interface RenderOptions {
   validity: string; // yyyy-mm-dd
   /** Período das ofertas escrito na arte. */
   validade?: Validade;
+  /** Tamanho do nome dos produtos (padrão: o tamanho do modelo). */
+  nome?: TamanhoNome;
 }
+
+/**
+ * Tamanho do nome escolhido pelo usuário: uma escala sobre o tamanho do modelo
+ * (Pequeno 0.8, Médio 1, Grande 1.35, Extra grande 1.7) ou um tamanho exato em px
+ * (na imagem final). A área do nome cresce/diminui junto e a foto ocupa o restante.
+ */
+export type TamanhoNome = { modo: 'escala'; escala: number } | { modo: 'px'; px: number };
+
+/** Fator sobre o tamanho máximo do modelo (`maxSize` já na escala do card). */
+function fatorNome(tam: TamanhoNome | undefined, maxSize: number) {
+  if (!tam) return 1;
+  const f = tam.modo === 'px' ? tam.px / Math.max(1, maxSize) : tam.escala;
+  return Math.min(3, Math.max(0.4, f));
+}
+
+/** Maior tamanho de nome desenhado na última prévia (px), para mostrar ao usuário. */
+let tamanhoNomeDesenhado = 0;
+const registrarTamanhoNome = (px: number) => { tamanhoNomeDesenhado = Math.max(tamanhoNomeDesenhado, px); };
 
 const MONT = "'Montserrat', Arial, sans-serif";
 
@@ -436,7 +456,11 @@ function drawCards(
   const [y, m, d] = opts.validity.split('-');
   const validityText = d ? `oferta válida até dia ${d}.${m}.${y}` : '';
   const k = lay.k; // todas as medidas do card original são multiplicadas por k
-  const topH = t.topHeight * k;
+  // Nome maior: a parte colorida de cima (foto) diminui e a área do nome cresce.
+  const fn = fatorNome(opts.nome, 18 * k);
+  const areaNome = (328 - t.topHeight - 6) * k;
+  const delta = Math.max(-areaNome * 0.4, Math.min(areaNome * (fn - 1), t.topHeight * k * 0.4));
+  const topH = t.topHeight * k - delta;
   const raio = t.radius * k;
 
   lay.cards.forEach((card, i) => {
@@ -471,11 +495,12 @@ function drawCards(
     const name = p.name.trim();
     if (name) {
       const t2 = ajustarTexto(ctx, name, 600, {
-        maxSize: 18 * k, minSize: Math.max(7, 10 * k), maxLines: 3,
+        maxSize: 18 * k * fn, minSize: Math.max(7, 10 * k * Math.min(fn, 1.6)), maxLines: fn > 1.25 ? 4 : 3,
         top: card.y + topH + 6 * k, bottom: card.y + 328 * k,
         largura: () => card.w - 16 * k,
       });
       font(ctx, 600, t2.size);
+      registrarTamanhoNome(t2.size);
       ctx.fillStyle = '#fff2f2';
       t2.lines.forEach((l, j) => ctx.fillText(l, cx, t2.ys[j]));
     }
@@ -521,7 +546,7 @@ function drawCards(
 // ---------------------------------------------------------------------------
 // Modelo "selos" (Oferta da Semana — açougue)
 // ---------------------------------------------------------------------------
-function drawBadge(ctx: CanvasRenderingContext2D, b: Circle, p: PhotoProductData, priceColor: string) {
+function drawBadge(ctx: CanvasRenderingContext2D, b: Circle, p: PhotoProductData, priceColor: string, tam?: TamanhoNome) {
   const { cx, cy, r } = b;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.45)';
@@ -561,15 +586,17 @@ function drawBadge(ctx: CanvasRenderingContext2D, b: Circle, p: PhotoProductData
   const name = p.name.trim().toUpperCase();
   if (name) {
     const raioUtil = r - 9; // dentro do anel
+    const fn = fatorNome(tam, r * 0.25);
     const t2 = ajustarTexto(ctx, name, 800, {
-      maxSize: r * 0.25, minSize: r * 0.11, maxLines: 3, entrelinha: 1.05,
-      top: cy - r * 0.7, bottom: cy - r * 0.17,
+      maxSize: r * 0.25 * fn, minSize: r * 0.11 * Math.min(fn, 1.5), maxLines: 3, entrelinha: 1.05,
+      top: cy - r * (fn > 1 ? 0.78 : 0.7), bottom: cy - r * 0.17,
       largura: (y) => {
         const dy = Math.abs(y - cy);
         return dy >= raioUtil ? 0 : 2 * Math.sqrt(raioUtil * raioUtil - dy * dy) * 0.9;
       },
     });
     font(ctx, 800, t2.size);
+    registrarTamanhoNome(t2.size);
     ctx.fillStyle = '#ffffff';
     t2.lines.forEach((l, k) => ctx.fillText(l, cx, t2.ys[k]));
   }
@@ -608,7 +635,7 @@ function drawBadge(ctx: CanvasRenderingContext2D, b: Circle, p: PhotoProductData
 
 function drawBadges(
   ctx: CanvasRenderingContext2D, t: Extract<PhotoTemplate, { kind: 'selos' }>,
-  products: PhotoProductData[], photos: (PreparedPhoto | null)[],
+  products: PhotoProductData[], photos: (PreparedPhoto | null)[], tam?: TamanhoNome,
 ) {
   for (const r of t.erase) eraseRect(ctx, r);
   for (const item of t.items) {
@@ -631,7 +658,7 @@ function drawBadges(
   }
   for (const item of t.items) {
     const p = products[item.index];
-    if (p) drawBadge(ctx, item.badge, p, t.priceColor);
+    if (p) drawBadge(ctx, item.badge, p, t.priceColor, tam);
   }
 }
 
@@ -1016,8 +1043,19 @@ function parseRgb(cor: string): [number, number, number] {
 
 function desenharCelula(
   ctx: CanvasRenderingContext2D, cel: Rect, k: number, est: EstiloCelula,
-  p: PhotoProductData | undefined, photo: PreparedPhoto | null,
+  p: PhotoProductData | undefined, photo: PreparedPhoto | null, tam?: TamanhoNome,
 ) {
+  // Tamanho do nome escolhido: a área do nome cresce (ou diminui) em direção à foto,
+  // e a foto fica com o espaço que sobra.
+  const fn = fatorNome(tam, est.nome.estilo.tamanhoMax * k);
+  const nomeR = rel(cel, est.nome);
+  const fotoR = rel(cel, est.foto);
+  if (fn !== 1) {
+    const d = Math.max(-nomeR.h * 0.5, Math.min(nomeR.h * (fn - 1), fotoR.h * 0.45));
+    const nomeAcima = nomeR.y + nomeR.h / 2 < fotoR.y + fotoR.h / 2;
+    if (nomeAcima) { nomeR.h += d; fotoR.y += d; fotoR.h -= d; }
+    else { nomeR.y -= d; nomeR.h += d; fotoR.h -= d; }
+  }
   if (est.caixa) {
     const c = rel(cel, est.caixa.rect);
     ctx.save();
@@ -1076,7 +1114,7 @@ function desenharCelula(
   if (!p) return;
 
   if (photo) {
-    drawPhoto(ctx, photo, rel(cel, est.foto), { frameRadius: 14 * k, frameBorder: '#ffffff', align: 'center' });
+    drawPhoto(ctx, photo, fotoR, { frameRadius: 14 * k, frameBorder: '#ffffff', align: 'center' });
   }
   if (est.selo) {
     // Selo (ex.: "BLACK") no canto do card.
@@ -1099,18 +1137,20 @@ function desenharCelula(
   const nome = p.name.trim();
   if (nome) {
     const s = est.nome.estilo;
-    let r = rel(cel, est.nome);
+    let r = nomeR;
     if (s.placa) r = desenharPlaca(ctx, r, s.placa, k);
     const texto = (s.prefixo ?? '') + (s.maiusculas ? nome.toUpperCase() : nome);
     const peso = s.peso;
     const it = s.italico ? 'italic ' : '';
     // ajustarTexto usa a fonte padrão; o itálico é aplicado no desenho (mesma largura aproximada).
     const t2 = ajustarTexto(ctx, texto, peso, {
-      maxSize: s.tamanhoMax * k, minSize: Math.max(6, s.tamanhoMin * k), maxLines: s.maxLinhas,
+      maxSize: s.tamanhoMax * k * fn, minSize: Math.max(6, s.tamanhoMin * k * Math.min(fn, 1.5)),
+      maxLines: s.maxLinhas + (fn > 1.25 ? 1 : 0),
       top: r.y, bottom: r.y + r.h, largura: () => r.w,
     });
     ctx.save();
     ctx.font = `${it}${peso} ${t2.size}px ${MONT}`;
+    registrarTamanhoNome(t2.size);
     ctx.fillStyle = s.cor;
     const esquerda = s.alinhar === 'esquerda';
     ctx.textAlign = esquerda ? 'left' : 'center';
@@ -1337,7 +1377,7 @@ function somarTextura(ctx: CanvasRenderingContext2D, r: Rect, tile: ImageData, q
 
 function drawGrade(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
-  products: PhotoProductData[], photos: (PreparedPhoto | null)[],
+  products: PhotoProductData[], photos: (PreparedPhoto | null)[], tam?: TamanhoNome,
 ) {
   for (const l of t.limpar) {
     if (l.tipo === 'coons') {
@@ -1375,7 +1415,7 @@ function drawGrade(
   let inicio = 0;
   t.grupos.forEach((g, gi) => {
     const { cells, k } = layouts[gi];
-    cells.forEach((cel, j) => desenharCelula(ctx, cel, k, g.estilo, products[inicio + j], photos[inicio + j] ?? null));
+    cells.forEach((cel, j) => desenharCelula(ctx, cel, k, g.estilo, products[inicio + j], photos[inicio + j] ?? null, tam));
     inicio += qtd[gi];
   });
 
@@ -1389,7 +1429,7 @@ function drawGrade(
 export async function renderPhotoTemplate(
   canvas: HTMLCanvasElement, t: PhotoTemplate, products: PhotoProductData[], opts: RenderOptions,
   waitForPhotos = false,
-): Promise<{ pending: Promise<unknown>[] }> {
+): Promise<{ pending: Promise<unknown>[]; tamanhoNome: number }> {
   const [original, { photos, pending }] = await Promise.all([loadBase(t.src), loadPhotos(products, waitForPhotos)]);
   // Logo da empresa no lugar de "SEU LOGO" / nome do mercado escrito na arte.
   const comLogo0 = await baseComLogo(t.id, original, t.width, t.height);
@@ -1399,6 +1439,7 @@ export async function renderPhotoTemplate(
   const base = await baseComDatas(t.id, comLogo, t.width, t.height, opts.validade);
   canvas.width = t.width;
   canvas.height = t.height;
+  tamanhoNomeDesenhado = 0;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(base, 0, 0, t.width, t.height);
   if (t.kind === 'cartoes') {
@@ -1412,9 +1453,9 @@ export async function renderPhotoTemplate(
     if (lay.remontar) remontarFundo(ctx, base, t, lay);
     drawCards(ctx, t, lay, cores, products, photos, opts);
   } else if (t.kind === 'grade') {
-    drawGrade(ctx, base, t, products, photos);
+    drawGrade(ctx, base, t, products, photos, opts.nome);
   } else {
-    drawBadges(ctx, t, products, photos);
+    drawBadges(ctx, t, products, photos, opts.nome);
   }
-  return { pending };
+  return { pending, tamanhoNome: Math.round(tamanhoNomeDesenhado) };
 }

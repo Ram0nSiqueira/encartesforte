@@ -32,6 +32,22 @@
         <label class="check"><input type="checkbox" id="validadeEstoque"> “ou enquanto durarem os estoques”</label>
       </fieldset>
 
+      <fieldset class="tamanho-nome" id="tamanhoNome">
+        <legend>Tamanho do nome dos produtos</legend>
+        <div class="tamanho-nome__opcoes" role="radiogroup" aria-label="Tamanho do nome">
+          <label><input type="radio" name="tamNome" value="p"> Pequeno</label>
+          <label><input type="radio" name="tamNome" value="m"> Médio</label>
+          <label><input type="radio" name="tamNome" value="g"> Grande</label>
+          <label><input type="radio" name="tamNome" value="gg"> Extra grande</label>
+          <label><input type="radio" name="tamNome" value="px"> Personalizado (px)</label>
+        </div>
+        <div class="tamanho-nome__px" id="tamNomePxBox" hidden>
+          <input type="range" id="tamNomePx" min="6" max="120" step="1" aria-label="Tamanho do nome em px">
+          <label class="tamanho-nome__num"><input type="number" id="tamNomePxNum" min="6" max="200" step="1"> px</label>
+        </div>
+        <p class="hint" id="tamNomeInfo"></p>
+      </fieldset>
+
       <fieldset class="cores-quadrados" id="coresQuadrados">
         <legend>Cor do Card De Produtos</legend>
         <div class="cores-quadrados__modo">
