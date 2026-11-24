@@ -151,6 +151,10 @@ const LOCAIS: Record<string, LocalData[]> = {
 
 LOCAIS['black-friday-horti-coluna'] = LOCAIS['semana-do-hortifruti'];
 
+// Ofertão do Açougue / do Churrasco: mesma arte do Sabadão do Churrasco.
+LOCAIS['ofertao-do-acougue'] = LOCAIS['sabadao-do-churrasco'];
+LOCAIS['ofertao-do-churrasco'] = LOCAIS['sabadao-do-churrasco'];
+
 export const temDatas = (id: string) => !!LOCAIS[id];
 
 /** Quebra o texto em até `max` linhas que caibam em `w`, no maior tamanho possível. */

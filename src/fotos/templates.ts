@@ -12,6 +12,8 @@ import blackFridayHortifruti from '../../ImagemEnarteVertical/Black Friday Horti
 import semanaDoHortifruti from '../../ImagemEnarteVertical/e61faf71a726d80e0b14f6ca73b9a1ce (1).jpg';
 import ofertasHortifruti from '../../ImagemEnarteVertical/e86cb61edd5afaa5b8c43afcf9f5b7a9 (1).jpg';
 import blackFridayHortiColuna from '../../ImagemEnarteVertical/final3.jpg';
+import ofertaoAcougue from '../../ImagemEnarteVertical/WhatsApp Image 2026-11-24 at 15.09.43.jpeg';
+import ofertaoChurrasco from '../../ImagemEnarteVertical/WhatsApp Image 2026-11-24 at 15.09.43 (1).jpeg';
 import type { EraseRect, Rect } from '../produto/template';
 
 export interface Circle { cx: number; cy: number; r: number }
@@ -961,6 +963,16 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     name: 'Black Friday Hortifrúti — coluna (3 + 4 produtos)',
     src: blackFridayHortiColuna,
   } as PhotoTemplate);
+}
+
+// "Ofertão do Açougue" e "Ofertão do Churrasco": mesma arte do Sabadão do Churrasco com outro
+// título (fundo, carnes dos cantos, faixa das datas e rodapé iguais); mesmo layout.
+{
+  const sabadao = PHOTO_TEMPLATES.find((t) => t.id === 'sabadao-do-churrasco')!;
+  PHOTO_TEMPLATES.push(
+    { ...sabadao, id: 'ofertao-do-acougue', name: 'Ofertão do Açougue (6 produtos)', src: ofertaoAcougue } as PhotoTemplate,
+    { ...sabadao, id: 'ofertao-do-churrasco', name: 'Ofertão do Churrasco (6 produtos)', src: ofertaoChurrasco } as PhotoTemplate,
+  );
 }
 
 /** Título de cada produto no formulário (ex.: "Super oferta 1"); null = "Produto N". */

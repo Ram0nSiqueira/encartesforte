@@ -59,6 +59,10 @@ const LOCAIS: Record<string, LocalLogo[]> = {
   ],
 };
 
+// Ofertão do Açougue / do Churrasco: mesma arte do Sabadão do Churrasco.
+LOCAIS['ofertao-do-acougue'] = LOCAIS['sabadao-do-churrasco'];
+LOCAIS['ofertao-do-churrasco'] = LOCAIS['sabadao-do-churrasco'];
+
 export const temLogo = (id: string) => !!LOGO_SRC && !!LOCAIS[id];
 
 function carregar(src: string): Promise<HTMLImageElement> {
