@@ -99,6 +99,8 @@
 
 .field small { font-weight: 400; color: var(--gray); }
 .btn-gold { border-color: var(--gold-dark); background: #fdf7e6; }
+.btn-perigo { border-color: #c62828; color: #c62828; background: #fff; }
+.btn-perigo:hover { background: #c62828; color: #fff; }
 .photo__current { position: relative; }
 .photo__badge {
   position: absolute;

@@ -839,6 +839,7 @@ montarProdutos();
 const cardsAcoes = $('cardsAcoes');
 const adicionarCardBtn = $<HTMLButtonElement>('adicionarCard');
 const removerVazioBtn = $<HTMLButtonElement>('removerCardVazio');
+const removerTodosBtn = $<HTMLButtonElement>('removerTodosCards');
 const cardsInfo = $('cardsInfo');
 
 /** Card sem nenhum cadastro iniciado (nome, preço, código de barras e foto vazios). */
@@ -877,6 +878,13 @@ function atualizarAcoesCards() {
   removerVazioBtn.title = removerVazioBtn.disabled
     ? n <= minimo ? `O encarte precisa ter pelo menos ${minimo} ${minimo === 1 ? 'card' : 'cards'}.` : 'Não há card vazio: todos já têm algum dado preenchido.'
     : `Remove um card vazio (${vazios} ${vazios === 1 ? 'vazio' : 'vazios'} no encarte).`;
+  // "Remover todos": só faz sentido se há algum card com dados ou cards além do mínimo.
+  const usados = state.products.slice(0, n).filter((p) => !cardVazio(p)).length;
+  const extras = aceitaCards(t) ? n - minimo : 0;
+  removerTodosBtn.disabled = usados === 0 && extras <= 0;
+  removerTodosBtn.title = removerTodosBtn.disabled
+    ? 'Os cards já estão vazios.'
+    : 'Apaga os dados de todos os cards (com ou sem foto) e remove os cards extras.';
 }
 acoesCardsProntas = true;
 
@@ -920,6 +928,30 @@ adicionarCardBtn.addEventListener('click', () => {
   const ultimo = blocks[posicao];
   ultimo?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   ultimo?.querySelector<HTMLInputElement>('[data-k="name"]')?.focus({ preventScroll: true });
+});
+
+/**
+ * Remove todos os cards de uma vez: apaga nome, preço, código, foto e cor de todos os produtos
+ * e, nos modelos flexíveis, volta à menor quantidade de cards do modelo (vazios).
+ * As fotos salvas no banco continuam lá (aparecem de novo ao digitar o nome do produto).
+ */
+removerTodosBtn.addEventListener('click', () => {
+  const t = template();
+  const n = quantidade(t);
+  const usados = state.products.slice(0, n).filter((p) => !cardVazio(p)).length;
+  const flex = aceitaCards(t);
+  const sobra = flex ? minimoCards(t) : n;
+  const msg = flex
+    ? `Remover todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nTodos os dados e fotos dos cards serão apagados e o encarte ficará com ${sobra} ${sobra === 1 ? 'card vazio' : 'cards vazios'}.`
+    : `Apagar os dados de todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nEste modelo tem quantidade fixa: os cards ficam vazios.`;
+  if (!confirm(msg)) return;
+  state.products = state.products.map(() => novoProduto());
+  if (flex) definirQuantidade(t, sobra);
+  garantirProdutos();
+  save();
+  montarProdutos();
+  syncTemplateUI();
+  scheduleRender();
 });
 
 function removerCard(i: number) {
@@ -970,7 +1002,10 @@ function syncTemplateUI() {
 
   // Adicionar/remover cards só nos modelos com espaço flexível.
   const flex = aceitaCards(t);
-  cardsAcoes.hidden = !flex;
+  // "Remover todos" existe em todos os modelos; adicionar/remover vazio só nos flexíveis.
+  cardsAcoes.hidden = false;
+  adicionarCardBtn.hidden = !flex;
+  removerVazioBtn.hidden = !flex;
   atualizarAcoesCards();
   cardsInfo.textContent = flex ? `${n} ${n === 1 ? 'card' : 'cards'} no encarte (máximo ${maxSlots(t)}).` : '';
   const { inicio, fim } = faixaFlexivel(t);
