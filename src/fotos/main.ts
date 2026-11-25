@@ -8,7 +8,7 @@ import './fotos.css';
 import { fileToDataUrl, IMAGE_ACCEPT } from '../editor/image';
 import { parseBRNumber } from '../editor/parser';
 import { bancoConfigurado, buscarFotoPrincipal, esquecerFotoPrincipal, PREFIXO_IMAGENS, salvarFotoPrincipal } from './api';
-import { distribuirGrupos, ensureFonts, renderPhotoTemplate, type TamanhoNome } from './render';
+import { aceitaAjusteCard, distribuirGrupos, ensureFonts, renderPhotoTemplate, type AjusteCard, type ModoCard, type TamanhoNome } from './render';
 import { temDatas } from './datas';
 // Fontes usadas nas datas escritas nas artes.
 import '@fontsource/anton/latin-400.css';
@@ -110,6 +110,8 @@ interface State {
   nameSize: NomeModo;
   /** Tamanho em px escolhido em cada modelo (cada arte tem uma resolução). */
   namePx: Record<string, number>;
+  /** Tamanho dos cards escolhido em cada modelo (cada arte tem um espaço livre diferente). */
+  cardSize: Record<string, AjusteCard>;
   products: ProductState[];
 }
 
@@ -144,6 +146,7 @@ function defaultState(): State {
     cardCounts: {},
     nameSize: 'm',
     namePx: {},
+    cardSize: {},
     products: Array.from({ length: MAX_PRODUCTS }, (_, i) => novoProduto(...(names[i] ?? []))),
   };
 }
@@ -162,6 +165,7 @@ function loadState(): State {
       squareColor: saved.squareColor ?? d.squareColor,
       nameSize: saved.nameSize ?? d.nameSize,
       namePx: saved.namePx ?? d.namePx,
+      cardSize: saved.cardSize ?? d.cardSize,
       // Versão anterior guardava uma quantidade só (do modelo "De Olho nas Ofertas").
       cardCounts:
         saved.cardCounts ??
@@ -257,13 +261,15 @@ async function render(waitForPhotos = false) {
     cardColor: state.squareMode === 'todos' ? state.squareColor : p.cardColor,
   }));
   const tmp = document.createElement('canvas');
-  const { pending, tamanhoNome } = await renderPhotoTemplate(tmp, t, data, {
+  const { pending, tamanhoNome, ganhoCard } = await renderPhotoTemplate(tmp, t, data, {
       validity: state.validity,
       validade: { inicio: state.validityStart, fim: state.validity, estoque: state.untilStock },
       nome: tamanhoNomeAtual(t),
+      card: ajusteCardAtual(t),
     }, waitForPhotos);
   if (ticket !== renderTicket) return;
   mostrarTamanhoNome(t, tamanhoNome);
+  mostrarAjusteCard(t, ganhoCard);
   canvas.width = tmp.width;
   canvas.height = tmp.height;
   canvas.getContext('2d')!.drawImage(tmp, 0, 0);
@@ -294,6 +300,7 @@ for (const t of PHOTO_TEMPLATES) {
     if (state.products.length !== antes) montarProdutos();
     syncTemplateUI();
     syncTamanhoNomeUI();
+    syncAjusteCardUI();
     scheduleRender();
   });
   modelList.appendChild(label);
@@ -364,6 +371,60 @@ const definirPx = (v: number) => {
 tamNomePx.addEventListener('input', () => definirPx(Number(tamNomePx.value)));
 tamNomePxNum.addEventListener('change', () => definirPx(Number(tamNomePxNum.value)));
 syncTamanhoNomeUI();
+
+// ---------------------------------------------------------------------------
+// Tamanho dos cards (esticar em largura/altura para ocupar o espaço livre)
+// ---------------------------------------------------------------------------
+const tamCardBox = $('tamanhoCard');
+const tamCardRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="tamCard"]')];
+const tamCardQuantoBox = $('tamCardQuantoBox');
+const tamCardQuanto = $<HTMLInputElement>('tamCardQuanto');
+const tamCardQuantoTxt = $('tamCardQuantoTxt');
+const tamCardInfo = $('tamCardInfo');
+
+function ajusteCardAtual(t: PhotoTemplate): AjusteCard {
+  return state.cardSize[t.id] ?? { modo: 'padrao', quanto: 1 };
+}
+
+function syncAjusteCardUI() {
+  const t = template();
+  const ok = aceitaAjusteCard(t);
+  tamCardBox.hidden = !ok;
+  if (!ok) return;
+  const a = ajusteCardAtual(t);
+  tamCardRadios.forEach((r) => (r.checked = r.value === a.modo));
+  tamCardQuantoBox.hidden = a.modo === 'padrao';
+  tamCardQuanto.value = String(Math.round(a.quanto * 100));
+  tamCardQuantoTxt.textContent = `Usar ${Math.round(a.quanto * 100)}% do espaço livre`;
+}
+
+function mostrarAjusteCard(t: PhotoTemplate, ganho: { w: number; h: number }) {
+  if (!aceitaAjusteCard(t)) return;
+  const a = ajusteCardAtual(t);
+  if (a.modo === 'padrao') {
+    tamCardInfo.textContent = 'Os cards mantêm a proporção do modelo. Escolha uma opção para eles ocuparem o espaço que sobra (o resto do encarte não muda).';
+    return;
+  }
+  const pct = (v: number) => Math.round((v - 1) * 100);
+  const partes: string[] = [];
+  if (a.modo !== 'altura' && pct(ganho.w) > 0) partes.push(`${pct(ganho.w)}% mais largos`);
+  if (a.modo !== 'largura' && pct(ganho.h) > 0) partes.push(`${pct(ganho.h)}% mais altos`);
+  const dir = a.modo === 'largura' ? 'ao lado' : a.modo === 'altura' ? 'acima/abaixo' : 'em volta';
+  tamCardInfo.textContent = partes.length
+    ? `Cards ${partes.join(' e ')}. O espaço extra vai para a foto; nome e preço acompanham.`
+    : `Não há espaço livre ${dir} dos cards neste layout. Tente outra opção ou mude a quantidade de cards.`;
+}
+
+const definirAjusteCard = (mudar: Partial<AjusteCard>) => {
+  const t = template();
+  state.cardSize[t.id] = { ...ajusteCardAtual(t), ...mudar };
+  save();
+  syncAjusteCardUI();
+  scheduleRender();
+};
+tamCardRadios.forEach((r) => r.addEventListener('change', () => definirAjusteCard({ modo: r.value as ModoCard })));
+tamCardQuanto.addEventListener('input', () => definirAjusteCard({ quanto: Number(tamCardQuanto.value) / 100 }));
+syncAjusteCardUI();
 
 validityInput.value = state.validity;
 validityInput.addEventListener('input', () => {

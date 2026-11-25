@@ -48,6 +48,21 @@
         <p class="hint" id="tamNomeInfo"></p>
       </fieldset>
 
+      <fieldset class="tamanho-nome" id="tamanhoCard">
+        <legend>Tamanho dos cards</legend>
+        <div class="tamanho-nome__opcoes" role="radiogroup" aria-label="Tamanho dos cards">
+          <label><input type="radio" name="tamCard" value="padrao"> Padrão do modelo</label>
+          <label><input type="radio" name="tamCard" value="largura"> Mais largo</label>
+          <label><input type="radio" name="tamCard" value="altura"> Mais alto</label>
+          <label><input type="radio" name="tamCard" value="ambos"> Largura e altura</label>
+        </div>
+        <div class="tamanho-nome__px" id="tamCardQuantoBox" hidden>
+          <input type="range" id="tamCardQuanto" min="10" max="100" step="5" aria-label="Quanto do espaço livre usar">
+          <span class="tamanho-nome__num" id="tamCardQuantoTxt"></span>
+        </div>
+        <p class="hint" id="tamCardInfo"></p>
+      </fieldset>
+
       <fieldset class="cores-quadrados" id="coresQuadrados">
         <legend>Cor do Card De Produtos</legend>
         <div class="cores-quadrados__modo">

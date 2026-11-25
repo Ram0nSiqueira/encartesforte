@@ -22,7 +22,39 @@ export interface RenderOptions {
   validade?: Validade;
   /** Tamanho do nome dos produtos (padrão: o tamanho do modelo). */
   nome?: TamanhoNome;
+  /** Tamanho dos cards: esticar em largura/altura para ocupar o espaço livre da área dos produtos. */
+  card?: AjusteCard;
 }
+
+/**
+ * Ajuste do tamanho dos cards escolhido pelo usuário.
+ * - 'padrao': como o modelo (cards crescem/diminuem mantendo a proporção original);
+ * - 'largura' / 'altura' / 'ambos': além disso, o card estica nessa direção até ocupar o espaço
+ *   livre da ÁREA DOS PRODUTOS (nunca passa dela, então topo, rodapé e decorações não mudam).
+ * `quanto` (0 a 1): quanto do espaço livre usar.
+ * Dentro do card, o espaço extra vai para a FOTO; nome e preço mantêm o tamanho e acompanham.
+ */
+export type ModoCard = 'padrao' | 'largura' | 'altura' | 'ambos';
+export interface AjusteCard { modo: ModoCard; quanto: number }
+
+/** Quanto o card pode esticar numa direção, além do tamanho proporcional (2 = o dobro). */
+const ESTICAR_MAX = 2.2;
+
+/** Tamanho final do card numa direção: cresce até o espaço livre (limitado), conforme o ajuste. */
+function esticar(atual: number, livre: number, ajuste: AjusteCard | undefined, eixo: 'largura' | 'altura') {
+  if (!ajuste || (ajuste.modo !== eixo && ajuste.modo !== 'ambos')) return atual;
+  const q = Math.min(1, Math.max(0, ajuste.quanto));
+  return atual + Math.max(0, Math.min(livre, atual * ESTICAR_MAX) - atual) * q;
+}
+
+/** Maior ganho aplicado na última prévia (1 = nenhum), para mostrar ao usuário. */
+let ganhoCard = { w: 1, h: 1 };
+const registrarGanho = (w: number, h: number) => {
+  ganhoCard = { w: Math.max(ganhoCard.w, w), h: Math.max(ganhoCard.h, h) };
+};
+
+/** O modelo permite ajustar o tamanho dos cards? (os de posições fixas, como os selos, não). */
+export const aceitaAjusteCard = (t: PhotoTemplate) => t.kind !== 'selos';
 
 /**
  * Tamanho do nome escolhido pelo usuário: uma escala sobre o tamanho do modelo
@@ -259,7 +291,7 @@ export interface LayoutCartoes {
  * testa de 1 a N colunas e escolhe a que deixa os cards MAIORES, respeitando
  * a largura disponível e a menor escala aceitável do topo. O topo só encolhe o necessário.
  */
-export function layoutCartoes(t: TemplateCartoes, n: number): LayoutCartoes {
+export function layoutCartoes(t: TemplateCartoes, n: number, ajuste?: AjusteCard): LayoutCartoes {
   const base = t.cards[0];
   if (!t.flex || n === t.cards.length) {
     return { cards: t.cards.slice(0, n), k: 1, remontar: false };
@@ -295,16 +327,19 @@ export function layoutCartoes(t: TemplateCartoes, n: number): LayoutCartoes {
     if (pontos > melhor.pontos + 0.5) melhor = { cols, linhas, w, pontos };
   }
 
-  const w = melhor.w;
-  const h = w * proporcao;
-  const alturaCards = melhor.linhas * h + (melhor.linhas - 1) * f.gap;
-  const escala = Math.min(1, (alturaLivre - alturaCards) / topoH);
+  const kCore = melhor.w / base.w;
+  const h0 = melhor.w * proporcao;
+  const escala = Math.min(1, (alturaLivre - (melhor.linhas * h0 + (melhor.linhas - 1) * f.gap)) / topoH);
   const topoAltura = topoH * escala;
   const topoLargura = t.width * escala;
 
-  // Sobra de altura (quando o topo não precisa encolher): centraliza os cards no espaço livre.
   const inicioCards = topoAltura + folgaTopo;
   const fimCards = t.height - rodapeH - folgaRodape;
+  // Ajuste do usuário: estica os cards no espaço que sobrou (o topo não muda por causa disso).
+  const w = esticar(melhor.w, (f.area.w - (melhor.cols - 1) * f.gap) / melhor.cols, ajuste, 'largura');
+  const h = esticar(h0, (fimCards - inicioCards - (melhor.linhas - 1) * f.gap) / melhor.linhas, ajuste, 'altura');
+  const alturaCards = melhor.linhas * h + (melhor.linhas - 1) * f.gap;
+  // Sobra de altura (quando o topo não precisa encolher): centraliza os cards no espaço livre.
   const yCards = inicioCards + (fimCards - inicioCards - alturaCards) / 2;
 
   const cards: Rect[] = [];
@@ -319,7 +354,7 @@ export function layoutCartoes(t: TemplateCartoes, n: number): LayoutCartoes {
 
   return {
     cards,
-    k: w / base.w,
+    k: kCore,
     remontar: true,
     topo: { escala, destino: { x: (t.width - topoLargura) / 2, y: 0, w: topoLargura, h: topoAltura } },
     rodape: { destino: { x: 0, y: t.height - rodapeH, w: t.width, h: rodapeH } },
@@ -460,21 +495,28 @@ function drawCards(
   const fn = fatorNome(opts.nome, 18 * k);
   const areaNome = (328 - t.topHeight - 6) * k;
   const delta = Math.max(-areaNome * 0.4, Math.min(areaNome * (fn - 1), t.topHeight * k * 0.4));
-  const topH = t.topHeight * k - delta;
+  // Card esticado na altura (ajuste do usuário): o espaço extra vai para a parte da foto,
+  // e nome/preço/validade descem junto. Na largura, tudo já é centralizado no card.
+  const base0 = t.cards[0];
+  const extraH = Math.max(0, (lay.cards[0]?.h ?? 0) - base0.h * k);
+  if (lay.cards[0]) registrarGanho(lay.cards[0].w / (base0.w * k), lay.cards[0].h / (base0.h * k));
+  const topH = t.topHeight * k - delta + extraH;
   const raio = t.radius * k;
 
-  lay.cards.forEach((card, i) => {
+  lay.cards.forEach((card0, i) => {
     const p = products[i];
+    // Medidas abaixo da foto usam o card sem a altura extra, deslocado para baixo.
+    const card = { ...card0, y: card0.y + extraH };
     const cx = card.x + card.w / 2;
 
     // Cartão limpo (cobre a foto e os textos originais).
     ctx.fillStyle = cores.corpo;
     ctx.beginPath();
-    ctx.roundRect(card.x - 1, card.y - 1, card.w + 2, card.h + 2, raio);
+    ctx.roundRect(card0.x - 1, card0.y - 1, card0.w + 2, card0.h + 2, raio);
     ctx.fill();
     ctx.fillStyle = p?.cardColor || cores.topo;
     ctx.beginPath();
-    ctx.roundRect(card.x - 1, card.y - 1, card.w + 2, topH, raio);
+    ctx.roundRect(card0.x - 1, card0.y - 1, card0.w + 2, topH, raio);
     ctx.fill();
 
     if (!p) return;
@@ -483,7 +525,7 @@ function drawCards(
     const photo = photos[i];
     if (photo) {
       const pad = (photo.cutout ? 14 : 12) * k;
-      drawPhoto(ctx, photo, { x: card.x + pad, y: card.y + pad, w: card.w - pad * 2, h: topH - pad * 2 }, {
+      drawPhoto(ctx, photo, { x: card0.x + pad, y: card0.y + pad, w: card0.w - pad * 2, h: topH - pad * 2 }, {
         frameRadius: 16 * k, frameBorder: '#ffffff', align: 'center',
       });
     }
@@ -496,7 +538,7 @@ function drawCards(
     if (name) {
       const t2 = ajustarTexto(ctx, name, 600, {
         maxSize: 18 * k * fn, minSize: Math.max(7, 10 * k * Math.min(fn, 1.6)), maxLines: fn > 1.25 ? 4 : 3,
-        top: card.y + topH + 6 * k, bottom: card.y + 328 * k,
+        top: card0.y + topH + 6 * k, bottom: card.y + 328 * k,
         largura: () => card.w - 16 * k,
       });
       font(ctx, 600, t2.size);
@@ -686,7 +728,7 @@ export const ESCALA_MAX_CARD = 2.4;
  * MAIORES, mantendo a proporção. Com poucos produtos o card CRESCE (até ESCALA_MAX_CARD) e
  * ocupa o espaço; com muitos, diminui. Foto, nome e preço acompanham o card (tudo em escala k).
  */
-function layoutGrupo(g: Grupo, n: number): { cells: Rect[]; k: number } {
+function layoutGrupo(g: Grupo, n: number, ajuste?: AjusteCard): { cells: Rect[]; k: number; esticado: boolean } {
   const { w: bw, h: bh } = g.estilo.base;
   let melhor = { cols: 1, linhas: n, w: 0 };
   for (let cols = 1; cols <= n; cols++) {
@@ -697,12 +739,15 @@ function layoutGrupo(g: Grupo, n: number): { cells: Rect[]; k: number } {
     // Empate no tamanho: prefere menos linhas (ex.: 3 cards lado a lado em vez de 2 + 1).
     if (w > melhor.w + 0.5 || (Math.abs(w - melhor.w) <= 0.5 && linhas < melhor.linhas)) melhor = { cols, linhas, w };
   }
-  const w = melhor.w, h = w * (bh / bw);
-  const k = w / bw;
+  const k = melhor.w / bw;
   // Espaços entre cards: diminuem com cards pequenos, mas não crescem além do original
   // (o tamanho escolhido já conta com o espaço original, então tudo cabe na área).
   const fg = Math.min(1, Math.max(k, 0.6));
   const gx = g.gapX * fg, gy = g.gapY * fg;
+  // Ajuste do usuário: o card estica até ocupar o espaço livre da área (k continua o do
+  // tamanho proporcional; o extra vai para a foto em desenharCelula).
+  const w = esticar(melhor.w, (g.area.w - (melhor.cols - 1) * gx) / melhor.cols, ajuste, 'largura');
+  const h = esticar(melhor.w * (bh / bw), (g.area.h - (melhor.linhas - 1) * gy) / melhor.linhas, ajuste, 'altura');
   const alturaTotal = melhor.linhas * h + (melhor.linhas - 1) * gy;
   const y0 = g.area.y + (g.area.h - alturaTotal) / 2;
   const cells: Rect[] = [];
@@ -714,10 +759,38 @@ function layoutGrupo(g: Grupo, n: number): { cells: Rect[]; k: number } {
     const col = i - linha * melhor.cols;
     cells.push({ x: x0 + col * (w + gx), y: y0 + linha * (h + gy), w, h });
   }
-  return { cells, k };
+  return { cells, k, esticado: w > melhor.w + 0.5 || h > melhor.w * (bh / bw) + 0.5 };
 }
 
-const rel = (c: Rect, r: RelRect): Rect => ({ x: c.x + r.x * c.w, y: c.y + r.y * c.h, w: r.w * c.w, h: r.h * c.h });
+/**
+ * Posições das partes do card (frações do card original) dentro da célula desenhada.
+ * Célula na proporção original: simples escala. Célula esticada (ajuste do usuário): a faixa
+ * da FOTO absorve o espaço extra; o que fica antes dela não se move e o que fica depois
+ * desliza junto. Caixa/fundo/foto esticam; nome estica só na largura; preço e selo mantêm o
+ * tamanho (só mudam de lugar), para não deformar.
+ */
+function geometria(cel: Rect, k: number, est: EstiloCelula) {
+  const cw = est.base.w * k, ch = est.base.h * k;
+  const dW = Math.max(0, cel.w - cw), dH = Math.max(0, cel.h - ch);
+  const f = est.foto;
+  const eixo = (v: number, a0: number, a1: number, tam: number, extra: number) =>
+    v * tam + (v <= a0 ? 0 : v >= a1 ? extra : (extra * (v - a0)) / Math.max(1e-6, a1 - a0));
+  const X = (v: number) => cel.x + eixo(v, f.x, f.x + f.w, cw, dW);
+  const Y = (v: number) => cel.y + eixo(v, f.y, f.y + f.h, ch, dH);
+  const esticada = (r: RelRect): Rect => {
+    const x = X(r.x), y = Y(r.y);
+    return { x, y, w: X(r.x + r.w) - x, h: Y(r.y + r.h) - y };
+  };
+  const movida = (r: RelRect): Rect => {
+    const w = r.w * cw, h = r.h * ch;
+    return { x: X(r.x + r.w / 2) - w / 2, y: Y(r.y + r.h / 2) - h / 2, w, h };
+  };
+  const nome = (r: RelRect): Rect => {
+    const e = esticada(r), m = movida(r);
+    return { x: e.x, w: e.w, y: m.y, h: m.h };
+  };
+  return { esticada, movida, nome };
+}
 
 function caminhoForma(ctx: CanvasRenderingContext2D, f: Forma) {
   ctx.beginPath();
@@ -1041,23 +1114,75 @@ function parseRgb(cor: string): [number, number, number] {
   return [m?.[0] ?? 0, m?.[1] ?? 0, m?.[2] ?? 0];
 }
 
-function desenharCelula(
-  ctx: CanvasRenderingContext2D, cel: Rect, k: number, est: EstiloCelula,
-  p: PhotoProductData | undefined, photo: PreparedPhoto | null, tam?: TamanhoNome,
-) {
+/** Área do nome e da foto na célula, já com o tamanho do nome escolhido pelo usuário. */
+function partesCelula(cel: Rect, k: number, est: EstiloCelula, tam?: TamanhoNome) {
   // Tamanho do nome escolhido: a área do nome cresce (ou diminui) em direção à foto,
   // e a foto fica com o espaço que sobra.
   const fn = fatorNome(tam, est.nome.estilo.tamanhoMax * k);
-  const nomeR = rel(cel, est.nome);
-  const fotoR = rel(cel, est.foto);
+  const geo = geometria(cel, k, est);
+  const nomeR = geo.nome(est.nome);
+  const fotoR = geo.esticada(est.foto);
   if (fn !== 1) {
     const d = Math.max(-nomeR.h * 0.5, Math.min(nomeR.h * (fn - 1), fotoR.h * 0.45));
     const nomeAcima = nomeR.y + nomeR.h / 2 < fotoR.y + fotoR.h / 2;
     if (nomeAcima) { nomeR.h += d; fotoR.y += d; fotoR.h -= d; }
     else { nomeR.y -= d; nomeR.h += d; fotoR.h -= d; }
   }
+  return { fn, geo, nomeR, fotoR };
+}
+
+/**
+ * Cards esticados na altura: a foto só cresce até bater na largura do card (ela não é cortada).
+ * O que sobrar seria um vão vazio entre nome, foto e preço, então cada LINHA de cards encolhe
+ * até a altura que a maior foto dela realmente usa (os cards da linha continuam alinhados).
+ */
+function compactarLinhas(
+  cells: Rect[], k: number, g: Grupo, photos: (PreparedPhoto | null)[], tam?: TamanhoNome,
+) {
+  const est = g.estilo;
+  const porY = new Map<number, number[]>();
+  cells.forEach((c, i) => {
+    const y = Math.round(c.y);
+    porY.set(y, [...(porY.get(y) ?? []), i]);
+  });
+  const linhas = [...porY.entries()].sort((a, b) => a[0] - b[0]).map((e) => e[1]);
+  if (!linhas.length) return;
+  const gapLinhas = linhas.length > 1 ? cells[linhas[1][0]].y - (cells[linhas[0][0]].y + cells[linhas[0][0]].h) : 0;
+  const altProporcional = est.base.h * k;
+  let mudou = false;
+  const alturas = linhas.map((idx) => {
+    const h = cells[idx[0]].h;
+    const extra = h - altProporcional;
+    const comFoto = idx.filter((i) => photos[i]);
+    if (extra <= 0.5 || !comFoto.length) return h; // sem fotos ainda: mantém o tamanho escolhido
+    let sobra = Infinity;
+    for (const i of comFoto) {
+      const { fotoR } = partesCelula(cells[i], k, est, tam);
+      const img = photos[i]!.canvas;
+      const usada = img.height * Math.min(fotoR.w / img.width, fotoR.h / img.height);
+      sobra = Math.min(sobra, fotoR.h - usada);
+    }
+    const corte = Math.min(extra, Math.max(0, sobra));
+    if (corte > 0.5) mudou = true;
+    return corte > 0.5 ? h - corte : h;
+  });
+  if (!mudou) return;
+  // Reempilha as linhas (mesmo espaço entre elas) e centraliza o bloco na área do grupo.
+  const total = alturas.reduce((s, h) => s + h, 0) + gapLinhas * (linhas.length - 1);
+  let y = g.area.y + (g.area.h - total) / 2;
+  linhas.forEach((idx, li) => {
+    for (const i of idx) cells[i] = { ...cells[i], y, h: alturas[li] };
+    y += alturas[li] + gapLinhas;
+  });
+}
+
+function desenharCelula(
+  ctx: CanvasRenderingContext2D, cel: Rect, k: number, est: EstiloCelula,
+  p: PhotoProductData | undefined, photo: PreparedPhoto | null, tam?: TamanhoNome,
+) {
+  const { fn, geo, nomeR, fotoR } = partesCelula(cel, k, est, tam);
   if (est.caixa) {
-    const c = rel(cel, est.caixa.rect);
+    const c = geo.esticada(est.caixa.rect);
     ctx.save();
     if (est.caixa.sombra) {
       ctx.shadowColor = 'rgba(0,0,0,0.28)';
@@ -1098,7 +1223,7 @@ function desenharCelula(
   }
   if (est.fundoFoto) {
     const ff = est.fundoFoto;
-    const f = rel(cel, ff.rect);
+    const f = geo.esticada(ff.rect);
     const rr = ff.raio * k;
     ctx.beginPath();
     ctx.roundRect(f.x, f.y, f.w, f.h, ff.cantos === 'topo' ? [rr, rr, 0, 0] : rr);
@@ -1118,7 +1243,7 @@ function desenharCelula(
   }
   if (est.selo) {
     // Selo (ex.: "BLACK") no canto do card.
-    const sr = rel(cel, est.selo.rect);
+    const sr = geo.movida(est.selo.rect);
     ctx.beginPath();
     ctx.roundRect(sr.x, sr.y, sr.w, sr.h, sr.h / 2);
     ctx.fillStyle = est.selo.fundo;
@@ -1164,7 +1289,7 @@ function desenharCelula(
     ctx.restore();
   }
 
-  if (p.price != null) desenharEtiqueta(ctx, rel(cel, est.preco), est.preco.estilo, p.price, p.unit);
+  if (p.price != null) desenharEtiqueta(ctx, geo.movida(est.preco), est.preco.estilo, p.price, p.unit);
 }
 
 /**
@@ -1377,7 +1502,7 @@ function somarTextura(ctx: CanvasRenderingContext2D, r: Rect, tile: ImageData, q
 
 function drawGrade(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
-  products: PhotoProductData[], photos: (PreparedPhoto | null)[], tam?: TamanhoNome,
+  products: PhotoProductData[], photos: (PreparedPhoto | null)[], tam?: TamanhoNome, ajuste?: AjusteCard,
 ) {
   for (const l of t.limpar) {
     if (l.tipo === 'coons') {
@@ -1397,19 +1522,33 @@ function drawGrade(
   for (const d of t.desenhos ?? []) desenharForma(ctx, base, t, d);
 
   const qtd = distribuirGrupos(t, products.length);
-  const layouts = t.grupos.map((g, gi) => layoutGrupo(g, qtd[gi]));
+  const layouts = t.grupos.map((g, gi) => layoutGrupo(g, qtd[gi], ajuste));
+  // Cards esticados: sem vãos vazios onde a foto não consegue crescer.
+  {
+    let ini = 0;
+    layouts.forEach((l, gi) => {
+      if (l.esticado) compactarLinhas(l.cells, l.k, t.grupos[gi], photos.slice(ini, ini + qtd[gi]), tam);
+      ini += qtd[gi];
+    });
+  }
+  layouts.forEach((l, gi) => {
+    const b = t.grupos[gi].estilo.base;
+    for (const c of l.cells) registrarGanho(c.w / (b.w * l.k), c.h / (b.h * l.k));
+  });
   // Área ocupada por cada card (foto + nome + preço), para não sobrepor decorações.
   const ocupadas = layouts.flatMap((l, gi) =>
     l.cells.map((c) => {
       const e = t.grupos[gi].estilo;
-      const partes = [rel(c, e.foto), rel(c, e.nome), rel(c, e.preco), ...(e.caixa ? [rel(c, e.caixa.rect)] : [])];
+      const geo = geometria(c, l.k, e);
+      const partes = [geo.esticada(e.foto), geo.nome(e.nome), geo.movida(e.preco), ...(e.caixa ? [geo.esticada(e.caixa.rect)] : [])];
       const x0 = Math.min(...partes.map((p) => p.x)), y0 = Math.min(...partes.map((p) => p.y));
       const x1 = Math.max(...partes.map((p) => p.x + p.w)), y1 = Math.max(...partes.map((p) => p.y + p.h));
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     }),
   );
   // Layout original da arte (mesma quantidade de cards): decorações exatamente como no original.
-  const padrao = t.grupos.every((g, gi) => qtd[gi] === g.padrao);
+  // Cards esticados pelo usuário: não é mais o layout original (decorações do original não voltam por cima).
+  const padrao = t.grupos.every((g, gi) => qtd[gi] === g.padrao) && layouts.every((l) => !l.esticado);
   restaurar(ctx, base, t, t.restaurarAntes, padrao, ocupadas);
 
   let inicio = 0;
@@ -1429,7 +1568,7 @@ function drawGrade(
 export async function renderPhotoTemplate(
   canvas: HTMLCanvasElement, t: PhotoTemplate, products: PhotoProductData[], opts: RenderOptions,
   waitForPhotos = false,
-): Promise<{ pending: Promise<unknown>[]; tamanhoNome: number }> {
+): Promise<{ pending: Promise<unknown>[]; tamanhoNome: number; ganhoCard: { w: number; h: number } }> {
   const [original, { photos, pending }] = await Promise.all([loadBase(t.src), loadPhotos(products, waitForPhotos)]);
   // Logo da empresa no lugar de "SEU LOGO" / nome do mercado escrito na arte.
   const comLogo0 = await baseComLogo(t.id, original, t.width, t.height);
@@ -1440,6 +1579,7 @@ export async function renderPhotoTemplate(
   canvas.width = t.width;
   canvas.height = t.height;
   tamanhoNomeDesenhado = 0;
+  ganhoCard = { w: 1, h: 1 };
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(base, 0, 0, t.width, t.height);
   if (t.kind === 'cartoes') {
@@ -1449,13 +1589,13 @@ export async function renderPhotoTemplate(
       topo: sampleColor(ctx, c0.x + t.sampleTop.dx, c0.y + t.sampleTop.dy),
       corpo: sampleColor(ctx, c0.x + t.sampleBody.dx, c0.y + t.sampleBody.dy),
     };
-    const lay = layoutCartoes(t, products.length);
+    const lay = layoutCartoes(t, products.length, opts.card);
     if (lay.remontar) remontarFundo(ctx, base, t, lay);
     drawCards(ctx, t, lay, cores, products, photos, opts);
   } else if (t.kind === 'grade') {
-    drawGrade(ctx, base, t, products, photos, opts.nome);
+    drawGrade(ctx, base, t, products, photos, opts.nome, opts.card);
   } else {
     drawBadges(ctx, t, products, photos, opts.nome);
   }
-  return { pending, tamanhoNome: Math.round(tamanhoNomeDesenhado) };
+  return { pending, tamanhoNome: Math.round(tamanhoNomeDesenhado), ganhoCard };
 }
