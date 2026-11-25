@@ -945,6 +945,8 @@ removerTodosBtn.addEventListener('click', () => {
     ? `Remover todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nTodos os dados e fotos dos cards serão apagados e o encarte ficará com ${sobra} ${sobra === 1 ? 'card vazio' : 'cards vazios'}.`
     : `Apagar os dados de todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nEste modelo tem quantidade fixa: os cards ficam vazios.`;
   if (!confirm(msg)) return;
+  // Guarda os cards no "Histórico de cards" antes de apagar (dá para restaurar).
+  guardarNoHistorico('limpar');
   state.products = state.products.map(() => novoProduto());
   if (flex) definirQuantidade(t, sobra);
   garantirProdutos();
@@ -1033,6 +1035,179 @@ function checkService() {
 }
 
 // ---------------------------------------------------------------------------
+// Histórico de cards: as 2 últimas versões dos cards (produtos, fotos, quantidade, modelo).
+// Uma versão é guardada antes de "Remover todos os cards" e ao baixar a imagem.
+// Restaurar troca de lugar com os cards atuais (que vão para o histórico), então nada se perde.
+// ---------------------------------------------------------------------------
+interface VersaoCards {
+  quando: number;
+  motivo: 'limpar' | 'baixar' | 'restaurar';
+  templateId: string;
+  quantidade: number;
+  squareMode: State['squareMode'];
+  squareColor: string;
+  products: ProductState[];
+  /** Miniatura da arte (JPEG pequeno), quando a imagem permite. */
+  miniatura?: string;
+}
+
+const HISTORICO_KEY = 'encartesforte:historico-cards-v1';
+const HISTORICO_MAX = 2;
+const historicoLista = $('historicoLista');
+const historicoInfo = $('historicoInfo');
+
+function carregarHistorico(): VersaoCards[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HISTORICO_KEY) ?? '[]');
+    return Array.isArray(v) ? v.slice(0, HISTORICO_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+let historico = carregarHistorico();
+
+function salvarHistorico() {
+  try {
+    localStorage.setItem(HISTORICO_KEY, JSON.stringify(historico));
+    return;
+  } catch {
+    /* sem espaço: tenta sem as fotos enviadas sem o banco (muito grandes) e sem miniaturas */
+  }
+  try {
+    const leve = historico.map((v) => ({
+      ...v,
+      miniatura: undefined,
+      products: v.products.map((p) => (p.photo?.startsWith('data:') ? { ...p, photo: undefined } : p)),
+    }));
+    localStorage.setItem(HISTORICO_KEY, JSON.stringify(leve));
+  } catch {
+    /* segue só na memória */
+  }
+}
+
+/** Produtos que contam na versão: os do modelo, sem os vazios do fim. */
+const produtosDaVersao = (n: number) => {
+  const lista = state.products.slice(0, n).map((p) => ({ ...p }));
+  while (lista.length && cardVazio(lista[lista.length - 1])) lista.pop();
+  return lista;
+};
+/** Mesmo conteúdo (para não repetir a mesma versão no histórico). */
+const assinatura = (v: Pick<VersaoCards, 'templateId' | 'quantidade' | 'products'>) =>
+  JSON.stringify([v.templateId, v.quantidade, v.products.map((p) => [p.name, p.price, p.unit, p.ean, p.photo, p.fundo, p.cardColor])]);
+
+function miniaturaAtual(): string | undefined {
+  try {
+    if (!canvas.width) return undefined;
+    const c = document.createElement('canvas');
+    c.width = 108;
+    c.height = Math.round((108 * canvas.height) / canvas.width);
+    c.getContext('2d')!.drawImage(canvas, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.7);
+  } catch {
+    return undefined; // foto de outro site sem permissão: sem miniatura
+  }
+}
+
+/** Versão com os cards atuais, ou null se não há nenhum card com dados. */
+function versaoAtual(motivo: VersaoCards['motivo']): VersaoCards | null {
+  const t = template();
+  const n = quantidade(t);
+  const products = produtosDaVersao(n);
+  if (!products.some((p) => !cardVazio(p))) return null;
+  return {
+    quando: Date.now(), motivo, templateId: t.id, quantidade: n,
+    squareMode: state.squareMode, squareColor: state.squareColor, products, miniatura: miniaturaAtual(),
+  };
+}
+
+/** Coloca uma versão no topo do histórico (sem repetir) e guarda só as 2 últimas. */
+function adicionarAoHistorico(v: VersaoCards | null) {
+  if (!v) return;
+  const a = assinatura(v);
+  historico = [v, ...historico.filter((h) => assinatura(h) !== a)].slice(0, HISTORICO_MAX);
+  salvarHistorico();
+  desenharHistorico();
+}
+
+/** Guarda os cards atuais no histórico (chamado antes de limpar e ao baixar a imagem). */
+function guardarNoHistorico(motivo: VersaoCards['motivo']) {
+  adicionarAoHistorico(versaoAtual(motivo));
+}
+
+const MOTIVOS: Record<VersaoCards['motivo'], string> = {
+  limpar: 'antes de remover todos os cards',
+  baixar: 'imagem baixada',
+  restaurar: 'cards trocados ao restaurar',
+};
+
+function desenharHistorico() {
+  historicoLista.replaceChildren();
+  historicoInfo.textContent = historico.length
+    ? 'Clique em “Restaurar” para voltar os cards como estavam (os cards atuais ficam guardados aqui).'
+    : 'Ainda não há versões salvas. Os cards são guardados aqui antes de “Remover todos os cards” e ao baixar a imagem (as 2 últimas).';
+  historico.forEach((v, i) => {
+    const modelo = PHOTO_TEMPLATES.find((t) => t.id === v.templateId);
+    const usados = v.products.filter((p) => !cardVazio(p));
+    const comFoto = usados.filter((p) => p.photo).length;
+    const data = new Date(v.quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const item = document.createElement('div');
+    item.className = 'historico__item';
+    item.innerHTML = `
+      <img class="historico__mini" alt="">
+      <div class="historico__texto"><strong></strong><span data-r="info"></span><span data-r="nomes"></span></div>
+      <button type="button" class="btn-ghost btn-gold">Restaurar</button>`;
+    const img = item.querySelector('img')!;
+    if (v.miniatura) img.src = v.miniatura;
+    else img.hidden = true;
+    item.querySelector('strong')!.textContent = `${modelo?.name.replace(/\s*\(.*\)$/, '') ?? 'Modelo'} — ${v.quantidade} ${v.quantidade === 1 ? 'card' : 'cards'}`;
+    item.querySelector('[data-r="info"]')!.textContent =
+      `${data} · ${MOTIVOS[v.motivo]} · ${usados.length} com dados, ${comFoto} com foto`;
+    const nomes = usados.map((p) => p.name.trim()).filter(Boolean);
+    item.querySelector('[data-r="nomes"]')!.textContent = nomes.length ? nomes.join(', ') : '(sem nomes)';
+    item.querySelector('[data-r="nomes"]')!.setAttribute('title', nomes.join(', '));
+    item.querySelector('button')!.addEventListener('click', () => restaurarVersao(i));
+    historicoLista.appendChild(item);
+  });
+}
+
+function restaurarVersao(i: number) {
+  const v = historico[i];
+  if (!v) return;
+  const atual = versaoAtual('restaurar');
+  const modelo = PHOTO_TEMPLATES.find((t) => t.id === v.templateId);
+  const msg = `Restaurar os ${v.quantidade} cards${modelo ? ` do modelo “${modelo.name.replace(/\s*\(.*\)$/, '')}”` : ''}?` +
+    (atual ? '\n\nOs cards atuais vão para o histórico (dá para voltar depois).' : '');
+  if (!confirm(msg)) return;
+
+  // Troca: a versão restaurada sai do histórico e os cards atuais entram no lugar.
+  historico = historico.filter((_, j) => j !== i);
+  if (modelo) state.templateId = modelo.id;
+  const t = template();
+  state.products = v.products.map((p) => ({ ...novoProduto(), ...p }));
+  if (aceitaCards(t)) definirQuantidade(t, v.quantidade);
+  state.squareMode = v.squareMode ?? state.squareMode;
+  state.squareColor = v.squareColor ?? state.squareColor;
+  garantirProdutos();
+  save();
+  adicionarAoHistorico(atual);
+  salvarHistorico();
+  desenharHistorico();
+
+  // Atualiza a tela: modelo escolhido, cores e formulários dos produtos.
+  document.querySelectorAll<HTMLInputElement>('input[name="modelo"]').forEach((r) => (r.checked = r.value === state.templateId));
+  coresBox.querySelectorAll<HTMLInputElement>('input[name="modoCor"]').forEach((r) => (r.checked = r.value === state.squareMode));
+  seletorTodos.marcar(state.squareColor);
+  montarProdutos();
+  syncTemplateUI();
+  syncTamanhoNomeUI();
+  syncAjusteCardUI();
+  syncTamanhoPrecoUI();
+  scheduleRender();
+  productsBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+desenharHistorico();
+
+// ---------------------------------------------------------------------------
 // Download
 // ---------------------------------------------------------------------------
 downloadBtn.addEventListener('click', async () => {
@@ -1043,6 +1218,8 @@ downloadBtn.addEventListener('click', async () => {
   } finally {
     downloadBtn.disabled = false;
   }
+  // Encarte pronto: guarda esta versão dos cards no histórico.
+  guardarNoHistorico('baixar');
   try {
     canvas.toBlob((blob) => {
       if (!blob) return;
