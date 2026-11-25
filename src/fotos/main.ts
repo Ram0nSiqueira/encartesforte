@@ -261,7 +261,7 @@ async function render(waitForPhotos = false) {
     cardColor: state.squareMode === 'todos' ? state.squareColor : p.cardColor,
   }));
   const tmp = document.createElement('canvas');
-  const { pending, tamanhoNome, ganhoCard } = await renderPhotoTemplate(tmp, t, data, {
+  const { pending, tamanhoNome, ganhoCard, ganhoPreco } = await renderPhotoTemplate(tmp, t, data, {
       validity: state.validity,
       validade: { inicio: state.validityStart, fim: state.validity, estoque: state.untilStock },
       nome: tamanhoNomeAtual(t),
@@ -269,7 +269,7 @@ async function render(waitForPhotos = false) {
     }, waitForPhotos);
   if (ticket !== renderTicket) return;
   mostrarTamanhoNome(t, tamanhoNome);
-  mostrarAjusteCard(t, ganhoCard);
+  mostrarAjusteCard(t, ganhoCard, ganhoPreco);
   canvas.width = tmp.width;
   canvas.height = tmp.height;
   canvas.getContext('2d')!.drawImage(tmp, 0, 0);
@@ -381,9 +381,13 @@ const tamCardQuantoBox = $('tamCardQuantoBox');
 const tamCardQuanto = $<HTMLInputElement>('tamCardQuanto');
 const tamCardQuantoTxt = $('tamCardQuantoTxt');
 const tamCardInfo = $('tamCardInfo');
+const tamCardPrecoBox = $('tamCardPrecoBox');
+const tamCardPreco = $<HTMLInputElement>('tamCardPreco');
 
 function ajusteCardAtual(t: PhotoTemplate): AjusteCard {
-  return state.cardSize[t.id] ?? { modo: 'padrao', quanto: 1 };
+  // Preço acompanha o card por padrão (também para escolhas salvas antes desta opção existir).
+  const salvo = state.cardSize[t.id];
+  return { preco: true, ...(salvo ?? { modo: 'padrao', quanto: 1 }) };
 }
 
 function syncAjusteCardUI() {
@@ -396,9 +400,11 @@ function syncAjusteCardUI() {
   tamCardQuantoBox.hidden = a.modo === 'padrao';
   tamCardQuanto.value = String(Math.round(a.quanto * 100));
   tamCardQuantoTxt.textContent = `Usar ${Math.round(a.quanto * 100)}% do espaço livre`;
+  tamCardPrecoBox.hidden = a.modo === 'padrao';
+  tamCardPreco.checked = a.preco !== false;
 }
 
-function mostrarAjusteCard(t: PhotoTemplate, ganho: { w: number; h: number }) {
+function mostrarAjusteCard(t: PhotoTemplate, ganho: { w: number; h: number }, ganhoPreco: number) {
   if (!aceitaAjusteCard(t)) return;
   const a = ajusteCardAtual(t);
   if (a.modo === 'padrao') {
@@ -410,8 +416,11 @@ function mostrarAjusteCard(t: PhotoTemplate, ganho: { w: number; h: number }) {
   if (a.modo !== 'altura' && pct(ganho.w) > 0) partes.push(`${pct(ganho.w)}% mais largos`);
   if (a.modo !== 'largura' && pct(ganho.h) > 0) partes.push(`${pct(ganho.h)}% mais altos`);
   const dir = a.modo === 'largura' ? 'ao lado' : a.modo === 'altura' ? 'acima/abaixo' : 'em volta';
+  const preco = pct(ganhoPreco) > 0
+    ? ` Preço ${pct(ganhoPreco)}% maior.`
+    : a.preco === false ? ' Preço no tamanho original.' : '';
   tamCardInfo.textContent = partes.length
-    ? `Cards ${partes.join(' e ')}. O espaço extra vai para a foto; nome e preço acompanham.`
+    ? `Cards ${partes.join(' e ')}.${preco} O espaço extra vai para a foto; o nome acompanha.`
     : `Não há espaço livre ${dir} dos cards neste layout. Tente outra opção ou mude a quantidade de cards.`;
 }
 
@@ -424,6 +433,7 @@ const definirAjusteCard = (mudar: Partial<AjusteCard>) => {
 };
 tamCardRadios.forEach((r) => r.addEventListener('change', () => definirAjusteCard({ modo: r.value as ModoCard })));
 tamCardQuanto.addEventListener('input', () => definirAjusteCard({ quanto: Number(tamCardQuanto.value) / 100 }));
+tamCardPreco.addEventListener('change', () => definirAjusteCard({ preco: tamCardPreco.checked }));
 syncAjusteCardUI();
 
 validityInput.value = state.validity;
