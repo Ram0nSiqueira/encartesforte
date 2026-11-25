@@ -1,5 +1,4 @@
-// Datas de validade escritas nas artes ("Ofertas válidas de 00/00 até 00/00/0000...").
-// O texto original é apagado e reescrito com as datas escolhidas, no mesmo lugar e estilo.
+// Datas de validade das artes: o texto original é apagado e reescrito com as datas escolhidas.
 import { eraseRect } from '../produto/render';
 import type { EraseRect, Rect } from '../produto/template';
 
@@ -108,7 +107,7 @@ const LOCAIS: Record<string, LocalData[]> = {
   ],
   'black-friday-hortifruti': [
     {
-      // Pílula "VÁLIDO DE [00/00] A [00/00]" (o interior é refeito; a borda verde fica).
+      // Pílula "VÁLIDO DE … A …" (a borda verde fica).
       apagar: { tipo: 'bordas', rect: { x: 1486, y: 82, w: 570, h: 50 } },
       caixa: { x: 1492, y: 86, w: 558, h: 42 },
       texto: (v) => {
@@ -210,7 +209,7 @@ export async function baseComDatas(
       eraseRect(ctx, r);
       const q = l.apagar.textura;
       if (q) {
-        // Devolve a textura (veio da madeira) somando o detalhe de um trecho limpo.
+        // Devolve o veio da madeira.
         const td = ctx.getImageData(q.x, q.y, q.w, q.h).data;
         const src = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
         src.canvas.width = largura; src.canvas.height = altura;

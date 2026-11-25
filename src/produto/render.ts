@@ -39,10 +39,7 @@ const formatPrice = (price: number) => {
   return { int: Number(i).toLocaleString('pt-BR'), cents: c };
 };
 
-/**
- * Lê uma faixa de pixels ao longo de uma borda e devolve a cor média (RGB)
- * em cada posição, suavizada ao longo da borda.
- */
+/** Cor média (suavizada) em cada posição ao longo de uma borda. */
 function edgeColors(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
@@ -65,7 +62,7 @@ function edgeColors(
       raw[i * 3 + c] = s / depth;
     }
   }
-  // Suaviza e recorta para o tamanho interno (as amostras têm `radius` a mais de cada lado).
+  // Suaviza e recorta para o tamanho interno.
   const out = new Float32Array(length * 3);
   for (let i = 0; i < length; i++) {
     for (let c = 0; c < 3; c++) {
@@ -80,10 +77,7 @@ function edgeColors(
   return out;
 }
 
-/**
- * Apaga um retângulo reconstruindo o fundo a partir das quatro bordas
- * (interpolação de Coons). Reproduz degradês sem deixar "caixa" visível.
- */
+/** Apaga um retângulo refazendo o fundo a partir das 4 bordas (Coons), sem "caixa" visível. */
 export function eraseRect(ctx: CanvasRenderingContext2D, r: EraseRect) {
   const depth = 4;
   const rad = 6;
@@ -91,8 +85,7 @@ export function eraseRect(ctx: CanvasRenderingContext2D, r: EraseRect) {
   const R = r.noRight ? L : edgeColors(ctx, r.x + r.w, r.y - rad, depth, r.h + rad * 2, 'y', r.h, rad);
   let T = edgeColors(ctx, r.x - rad, r.y - depth, r.w + rad * 2, depth, 'x', r.w, rad, r.noRight);
   if (r.noTop) {
-    // Borda de cima com detalhes (ex.: um título encostado): usa só a cor geral dela,
-    // bem suavizada, para não "escorrer" listras para dentro da área.
+    // Borda de cima com detalhes: usa só a cor geral (sem listras escorrendo).
     const raio = Math.max(20, Math.round(r.w * 0.12));
     const S = new Float32Array(r.w * 3);
     for (let x = 0; x < r.w; x++) {

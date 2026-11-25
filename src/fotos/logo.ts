@@ -1,9 +1,8 @@
-// Logo da empresa (pasta /logo) aplicada nos encartes, no lugar de "SEU LOGO" e do nome
-// "Supermercado Forte" escrito nas artes. A logo é pequena e se ajusta ao espaço de cada lugar.
+// Logo da empresa (pasta /logo) no lugar de "SEU LOGO" / nome escrito nas artes.
 import { eraseRect } from '../produto/render';
 import type { EraseRect, Rect } from '../produto/template';
 
-// Primeira imagem da pasta /logo (trocar o arquivo na pasta troca a logo em todos os encartes).
+// Primeira imagem da pasta /logo (trocar o arquivo troca a logo em todos os encartes).
 const arquivos = import.meta.glob('../../logo/*.{png,jpg,jpeg,webp,PNG,JPG,JPEG,WEBP}', {
   eager: true,
   query: '?url',
@@ -12,7 +11,7 @@ const arquivos = import.meta.glob('../../logo/*.{png,jpg,jpeg,webp,PNG,JPG,JPEG,
 const LOGO_SRC = Object.values(arquivos)[0] ?? null;
 
 interface LocalLogo {
-  /** Como tirar o que estava escrito: refazer o fundo pelas bordas, ou pintar com uma cor. */
+  /** Como apagar o texto: refazer pelas bordas ou pintar com uma cor. */
   apagar: { tipo: 'bordas'; rect: EraseRect } | { tipo: 'cor'; rect: Rect; cor: string; raio?: number };
   /** Espaço onde a logo é encaixada (centralizada, sem distorcer). */
   area: Rect;
@@ -30,7 +29,7 @@ const LOCAIS: Record<string, LocalLogo[]> = {
     { apagar: { tipo: 'bordas', rect: { x: 815, y: 1208, w: 175, h: 84 } }, area: { x: 820, y: 1214, w: 165, h: 72 } },
   ],
   'fim-de-ano-de-ofertas': [
-    // Caixa branca abaixo do título: o texto sai e a logo entra na mesma caixa.
+    // Caixa branca abaixo do título.
     { apagar: { tipo: 'cor', rect: { x: 302, y: 352, w: 176, h: 64 }, cor: '#ffffff' }, area: { x: 306, y: 352, w: 168, h: 64 } },
     { apagar: { tipo: 'bordas', rect: { x: 14, y: 1352, w: 160, h: 66 } }, area: { x: 18, y: 1356, w: 152, h: 58 } },
   ],
@@ -38,11 +37,11 @@ const LOCAIS: Record<string, LocalLogo[]> = {
     { apagar: { tipo: 'bordas', rect: { x: 68, y: 2224, w: 362, h: 144 } }, area: { x: 76, y: 2236, w: 320, h: 118 } },
   ],
   'ofertas-de-bebidas': [
-    // Plaquinha branca com borda vermelha: o texto sai e a logo entra na plaquinha.
+    // Plaquinha branca com borda vermelha.
     { apagar: { tipo: 'cor', rect: { x: 826, y: 70, w: 238, h: 100 }, cor: '#ffffff', raio: 10 }, area: { x: 832, y: 76, w: 226, h: 88 } },
   ],
   'black-friday-hortifruti': [
-    // Caixa branca com borda verde ("SUPERMERCADO FORTE" escrito): o texto sai, a borda fica.
+    // Caixa branca com borda verde (a borda fica).
     { apagar: { tipo: 'cor', rect: { x: 74, y: 53, w: 295, h: 116 }, cor: '#ffffff', raio: 12 }, area: { x: 82, y: 60, w: 279, h: 102 } },
   ],
   'semana-do-hortifruti': [
@@ -76,10 +75,7 @@ function carregar(src: string): Promise<HTMLImageElement> {
 
 let logoPronta: Promise<HTMLCanvasElement | null> | null = null;
 
-/**
- * Prepara a logo: recorta as sobras do fundo (cor dos cantos) e deixa uma margem pequena,
- * com cantos arredondados. Assim fica uma logo compacta, só com o conteúdo.
- */
+/** Prepara a logo: corta as sobras do fundo e deixa margem pequena com cantos arredondados. */
 function prepararLogo(): Promise<HTMLCanvasElement | null> {
   if (!LOGO_SRC) return Promise.resolve(null);
   logoPronta ??= (async () => {
@@ -130,7 +126,7 @@ function prepararLogo(): Promise<HTMLCanvasElement | null> {
 
 const cache = new Map<string, HTMLCanvasElement>();
 
-/** Imagem base do modelo com a logo da empresa aplicada (ou a original, se não houver logo/local). */
+/** Arte do modelo com a logo aplicada (ou a original, se não houver logo/lugar). */
 export async function baseComLogo(
   id: string, img: HTMLImageElement, largura: number, altura: number,
 ): Promise<HTMLImageElement | HTMLCanvasElement> {

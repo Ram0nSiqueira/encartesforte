@@ -48,10 +48,7 @@ const CORES_QUADRADO: [string, string][] = [
   ['#e9ecef', 'Cinza claro'],
 ];
 
-/**
- * Paleta de cores do quadrado (cores prontas + "outra cor").
- * Devolve o elemento e uma função para marcar a cor atual.
- */
+/** Paleta de cores do quadrado (prontas + "outra cor"); devolve o elemento e `marcar(cor)`. */
 function criarSeletorCor(aoEscolher: (cor: string) => void) {
   const el = document.createElement('div');
   el.className = 'quadrado__cores';
@@ -87,7 +84,7 @@ const FUNDOS: [Fundo, string][] = [
   ['original', 'Fundo original'],
 ];
 
-/** Endereço da foto no fundo escolhido (o banco guarda as três versões: sem fundo, branca e original). */
+/** Endereço da foto no fundo escolhido (o banco guarda: sem fundo, branca e original). */
 const photoUrl = (p: ProductState) => {
   if (p.photo?.startsWith(PREFIXO_IMAGENS) && p.fundo !== 'transparente') return p.photo.replace(/\.png$/, `-${p.fundo}.png`);
   return p.photo;
@@ -100,19 +97,19 @@ interface State {
   validityStart: string;
   /** Acrescentar "ou enquanto durarem os estoques". */
   untilStock: boolean;
-  /** "todos": uma cor para todos os quadrados; "cada": cor escolhida em cada produto. */
+  /** "todos": uma cor para todos os quadrados; "cada": uma por produto. */
   squareMode: 'todos' | 'cada';
-  /** Cor de todos os quadrados no modo "todos" ('' = cor original do modelo). */
+  /** Cor dos quadrados no modo "todos" ('' = original do modelo). */
   squareColor: string;
-  /** Quantidade de cards nos modelos que permitem adicionar/remover cards. */
+  /** Quantidade de cards por modelo (nos flexíveis). */
   cardCounts: Record<string, number>;
-  /** Tamanho do nome dos produtos: P/M/G/GG (escala sobre o modelo) ou px exato. */
+  /** Tamanho do nome: P/M/G/GG ou px exato. */
   nameSize: NomeModo;
-  /** Tamanho em px escolhido em cada modelo (cada arte tem uma resolução). */
+  /** Tamanho do nome em px, por modelo. */
   namePx: Record<string, number>;
-  /** Tamanho dos cards escolhido em cada modelo (cada arte tem um espaço livre diferente). */
+  /** Tamanho dos cards, por modelo. */
   cardSize: Record<string, AjusteCard>;
-  /** Tamanho do preço escolhido em cada modelo (automático ou manual). */
+  /** Tamanho do preço (automático ou manual), por modelo. */
   priceSize: Record<string, TamanhoPreco>;
   products: ProductState[];
 }
@@ -170,7 +167,7 @@ function loadState(): State {
       namePx: saved.namePx ?? d.namePx,
       cardSize: saved.cardSize ?? d.cardSize,
       priceSize: saved.priceSize ?? d.priceSize,
-      // Versão anterior guardava uma quantidade só (do modelo "De Olho nas Ofertas").
+      // Versão antiga: uma quantidade só ("De Olho nas Ofertas").
       cardCounts:
         saved.cardCounts ??
         ((saved as { cardCount?: number }).cardCount
@@ -187,7 +184,7 @@ function loadState(): State {
 }
 
 const state = loadState();
-/** Fica true depois que os botões de cards existem (save() é chamado desde o início). */
+/** true quando os botões de cards já existem. */
 let acoesCardsProntas = false;
 const save = () => {
   try {
@@ -195,7 +192,7 @@ const save = () => {
   } catch {
     /* sem espaço: segue sem salvar */
   }
-  // A cada alteração, um card pode deixar de estar (ou voltar a ficar) vazio.
+  // Um card pode ter deixado (ou voltado a ficar) vazio.
   if (acoesCardsProntas) atualizarAcoesCards();
 };
 
@@ -218,11 +215,11 @@ const template = () => getPhotoTemplate(state.templateId);
 /** O modelo permite adicionar/remover cards? */
 const aceitaCards = (t: PhotoTemplate) => aceitaCardsTemplate(t);
 
-/** Menor quantidade de cards (modelos com grupos fixos precisam de pelo menos esses + 1). */
+/** Menor quantidade de cards (grupos fixos + 1 no flexível). */
 const minimoCards = (t: PhotoTemplate) =>
   t.kind === 'grade' ? t.grupos.reduce((s, g) => s + (g.max > g.padrao ? 1 : g.padrao), 0) : 1;
 
-/** Quantos produtos o modelo atual usa (nos modelos flexíveis, o que o usuário escolheu, por modelo). */
+/** Quantos cards o modelo usa (nos flexíveis, o que o usuário escolheu). */
 const quantidade = (t = template()) =>
   aceitaCards(t)
     ? Math.min(Math.max(minimoCards(t), state.cardCounts[t.id] ?? slotCount(t)), maxSlots(t))
@@ -232,7 +229,7 @@ const definirQuantidade = (t: PhotoTemplate, n: number) => {
   state.cardCounts[t.id] = n;
 };
 
-/** Garante que existam produtos suficientes no estado para a quantidade atual. */
+/** Garante produtos suficientes para a quantidade atual. */
 function garantirProdutos() {
   while (state.products.length < quantidade()) state.products.push(novoProduto());
 }
@@ -248,7 +245,7 @@ function scheduleRender() {
   renderTimer = window.setTimeout(render, 120);
 }
 
-/** Desenha a prévia; com `waitForPhotos` espera todas as fotos (usado antes do download). */
+/** Desenha a prévia; `waitForPhotos` espera todas as fotos (download). */
 async function render(waitForPhotos = false) {
   const ticket = ++renderTicket;
   const t = template();
@@ -259,8 +256,7 @@ async function render(waitForPhotos = false) {
     price: parseBRNumber(p.price),
     unit: p.unit,
     photo: photoUrl(p),
-    // As fotos salvas já vêm no fundo escolhido. O recorte simples de fundo claro só é usado
-    // quando a remoção de fundo da IA falhou e o usuário pediu "sem fundo".
+    // Recorte simples de fundo claro: só se a IA falhou e o usuário pediu "sem fundo".
     removeBg: !!p.photo?.startsWith('data:') && p.photoSource === SEM_IA && p.fundo === 'transparente',
     cardColor: state.squareMode === 'todos' ? state.squareColor : p.cardColor,
   }));
@@ -299,7 +295,7 @@ for (const t of PHOTO_TEMPLATES) {
   radio.checked = t.id === state.templateId;
   radio.addEventListener('change', () => {
     state.templateId = t.id;
-    // O novo modelo pode usar mais produtos que os existentes.
+    // O novo modelo pode usar mais produtos.
     const antes = state.products.length;
     garantirProdutos();
     save();
@@ -321,10 +317,10 @@ const tamNomePxBox = $('tamNomePxBox');
 const tamNomePx = $<HTMLInputElement>('tamNomePx');
 const tamNomePxNum = $<HTMLInputElement>('tamNomePxNum');
 const tamNomeInfo = $('tamNomeInfo');
-/** Último tamanho de nome desenhado (px), para começar o "Personalizado" a partir dele. */
+/** Último tamanho de nome desenhado (px): ponto de partida do "Personalizado". */
 let ultimoTamanhoNome = 0;
 
-/** Limite do controle em px: proporcional ao tamanho da arte (cada modelo tem uma resolução). */
+/** Limite do controle em px (proporcional à largura da arte). */
 const maxPxNome = (t: PhotoTemplate) => Math.max(40, Math.round(t.width * 0.07));
 
 function tamanhoNomeAtual(t: PhotoTemplate): TamanhoNome {
@@ -360,7 +356,7 @@ function syncTamanhoNomeUI() {
 tamNomeRadios.forEach((r) =>
   r.addEventListener('change', () => {
     state.nameSize = r.value as NomeModo;
-    // Personalizado começa no tamanho que está aparecendo agora.
+    // Personalizado começa no tamanho atual.
     const t = template();
     if (state.nameSize === 'px' && !state.namePx[t.id]) state.namePx[t.id] = Math.max(6, ultimoTamanhoNome || Math.round(maxPxNome(t) / 3));
     save();
@@ -380,7 +376,7 @@ tamNomePxNum.addEventListener('change', () => definirPx(Number(tamNomePxNum.valu
 syncTamanhoNomeUI();
 
 // ---------------------------------------------------------------------------
-// Tamanho dos cards (esticar em largura/altura para ocupar o espaço livre)
+// Tamanho dos cards (esticar para ocupar o espaço livre)
 // ---------------------------------------------------------------------------
 const tamCardBox = $('tamanhoCard');
 const tamCardRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="tamCard"]')];
@@ -392,7 +388,7 @@ const tamCardPrecoBox = $('tamCardPrecoBox');
 const tamCardPreco = $<HTMLInputElement>('tamCardPreco');
 
 function ajusteCardAtual(t: PhotoTemplate): AjusteCard {
-  // Preço acompanha o card por padrão (também para escolhas salvas antes desta opção existir).
+  // Preço acompanha o card por padrão.
   const salvo = state.cardSize[t.id];
   return { preco: true, ...(salvo ?? { modo: 'padrao', quanto: 1 }) };
 }
@@ -407,7 +403,7 @@ function syncAjusteCardUI() {
   tamCardQuantoBox.hidden = a.modo === 'padrao';
   tamCardQuanto.value = String(Math.round(a.quanto * 100));
   tamCardQuantoTxt.textContent = `Usar ${Math.round(a.quanto * 100)}% do espaço livre`;
-  // No preço manual, o tamanho do preço é controlado no bloco "Tamanho do preço".
+  // No preço manual, quem manda é o bloco "Tamanho do preço".
   tamCardPrecoBox.hidden = a.modo === 'padrao' || tamanhoPrecoAtual(t).modo === 'manual';
   tamCardPreco.checked = a.preco !== false;
 }
@@ -445,7 +441,7 @@ tamCardPreco.addEventListener('change', () => definirAjusteCard({ preco: tamCard
 syncAjusteCardUI();
 
 // ---------------------------------------------------------------------------
-// Tamanho do preço (automático = acompanha o card; manual = o usuário escolhe)
+// Tamanho do preço (automático ou manual)
 // ---------------------------------------------------------------------------
 const tamPrecoBox = $('tamanhoPreco');
 const tamPrecoRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="tamPreco"]')];
@@ -461,7 +457,7 @@ function tamanhoPrecoAtual(t: PhotoTemplate): TamanhoPreco {
   return state.priceSize[t.id] ?? { modo: 'auto' };
 }
 
-/** Escala manual em % (o último valor escolhido fica guardado mesmo voltando ao automático). */
+/** Escala manual em % (lembra o último valor mesmo voltando ao automático). */
 const ultimaEscalaManual: Record<string, number> = {};
 const escalaManualPct = (t: PhotoTemplate) => {
   const p = tamanhoPrecoAtual(t);
@@ -481,7 +477,7 @@ function syncTamanhoPrecoUI() {
   tamPrecoTxt.textContent = `${pct}%`;
   tamPrecoMenos.disabled = pct <= PRECO_MIN;
   tamPrecoMais.disabled = pct >= PRECO_MAX;
-  // No manual, a opção "aumentar o preço junto com o card" não se aplica.
+  // Atualiza o bloco dos cards (a opção "preço junto" some no manual).
   syncAjusteCardUI();
 }
 
@@ -551,7 +547,7 @@ untilStockInput.addEventListener('change', () => {
 const blocks: HTMLElement[] = [];
 /** Marca, na paleta de cada produto, a cor atual do quadrado. */
 const marcarCorProduto: ((cor: string) => void)[] = [];
-/** Foto usada sem a remoção de fundo da IA (falhou): no "sem fundo", aplica o recorte simples de fundo claro. */
+/** Marca de foto sem a remoção de fundo da IA (falhou): usa o recorte simples. */
 const SEM_IA = 'Envio manual (não salvo)';
 
 const UNITS = ['unid', 'kg', 'g', 'pct', 'cx', 'L', 'dz', 'bdj'];
@@ -616,7 +612,7 @@ function productBlock(i: number): HTMLElement {
     });
   });
 
-  // Cor do quadrado deste produto (usada no modo "Escolher em cada produto").
+  // Cor do quadrado deste produto (modo "cada produto").
   const seletor = criarSeletorCor((cor) => {
     p.cardColor = cor;
     save();
@@ -713,7 +709,7 @@ function syncPhotoUI(i: number) {
   source.textContent = p.photo && p.photoSource ? `Foto: ${p.photoSource}${p.brand ? ` · ${p.brand}` : ''}` : '';
 }
 
-/** Procura a foto salva do produto (pelo código de barras ou pelo nome), com os botões bloqueados. */
+/** Busca a foto salva do produto (por código de barras ou nome). */
 async function runSearch(i: number) {
   const p = state.products[i];
   const block = blocks[i];
@@ -751,10 +747,7 @@ async function runSearch(i: number) {
   }
 }
 
-/**
- * Envio do usuário: o fundo é tirado no navegador e a foto é salva no banco (Supabase) como
- * foto do produto. Se o banco estiver fora do ar, a foto recortada é usada só neste encarte.
- */
+/** Envio de foto: tira o fundo no navegador e salva no banco (sem banco, usa só neste encarte). */
 async function uploadPhoto(i: number, file: File) {
   const p = state.products[i];
   const nome = p.name.trim();
@@ -842,13 +835,10 @@ const removerVazioBtn = $<HTMLButtonElement>('removerCardVazio');
 const removerTodosBtn = $<HTMLButtonElement>('removerTodosCards');
 const cardsInfo = $('cardsInfo');
 
-/** Card sem nenhum cadastro iniciado (nome, preço, código de barras e foto vazios). */
+/** Card vazio (sem nome, preço, código e foto). */
 const cardVazio = (p: ProductState) => !p.name.trim() && !p.price.trim() && !p.ean.trim() && !p.photo;
 
-/**
- * Faixa de índices dos cards que podem ser adicionados/removidos.
- * Nos modelos com grupos fixos (ex.: "Super oferta"), só o grupo flexível muda.
- */
+/** Índices dos cards que podem ser adicionados/removidos (só o grupo flexível). */
 function faixaFlexivel(t = template()): { inicio: number; fim: number } {
   const n = quantidade(t);
   if (t.kind !== 'grade') return { inicio: 0, fim: n };
@@ -861,13 +851,13 @@ function faixaFlexivel(t = template()): { inicio: number; fim: number } {
   return { inicio: 0, fim: 0 };
 }
 
-/** Índices dos cards vazios entre os que podem ser removidos. */
+/** Índices dos cards vazios removíveis. */
 const indicesVazios = () => {
   const { inicio, fim } = faixaFlexivel();
   return state.products.slice(0, quantidade()).flatMap((p, i) => (i >= inicio && i < fim && cardVazio(p) ? [i] : []));
 };
 
-/** Habilita/desabilita "Adicionar card" e "Remover card vazio" conforme o encarte atual. */
+/** Habilita/desabilita os botões de cards conforme o encarte atual. */
 function atualizarAcoesCards() {
   const t = template();
   const n = quantidade(t);
@@ -878,7 +868,7 @@ function atualizarAcoesCards() {
   removerVazioBtn.title = removerVazioBtn.disabled
     ? n <= minimo ? `O encarte precisa ter pelo menos ${minimo} ${minimo === 1 ? 'card' : 'cards'}.` : 'Não há card vazio: todos já têm algum dado preenchido.'
     : `Remove um card vazio (${vazios} ${vazios === 1 ? 'vazio' : 'vazios'} no encarte).`;
-  // "Remover todos": só faz sentido se há algum card com dados ou cards além do mínimo.
+  // "Remover todos": só se há card com dados ou cards além do mínimo.
   const usados = state.products.slice(0, n).filter((p) => !cardVazio(p)).length;
   const extras = aceitaCards(t) ? n - minimo : 0;
   removerTodosBtn.disabled = usados === 0 && extras <= 0;
@@ -892,7 +882,7 @@ removerVazioBtn.addEventListener('click', () => {
   const t = template();
   const vazios = indicesVazios();
   if (!aceitaCards(t) || quantidade(t) <= minimoCards(t) || !vazios.length) return;
-  // Remove um card vazio (o último deles); nunca mexe em cards com dados.
+  // Remove o último card vazio (nunca um com dados).
   const i = vazios[vazios.length - 1];
   state.products.splice(i, 1);
   definirQuantidade(t, quantidade(t) - 1);
@@ -909,7 +899,7 @@ adicionarCardBtn.addEventListener('click', () => {
   let posicao: number;
   let novo: boolean;
   if (t.kind === 'grade') {
-    // Insere no fim do grupo flexível (os grupos fixos, depois dele, não se movem).
+    // Insere no fim do grupo flexível.
     posicao = faixaFlexivel(t).fim;
     state.products.splice(posicao, 0, novoProduto());
     definirQuantidade(t, quantidade(t) + 1);
@@ -917,7 +907,7 @@ adicionarCardBtn.addEventListener('click', () => {
   } else {
     definirQuantidade(t, quantidade(t) + 1);
     posicao = quantidade(t) - 1;
-    // Reaproveita um produto que já existia nessa posição (se houver); senão cria um vazio.
+    // Reaproveita o produto que já existia nessa posição, se houver.
     novo = state.products.length < quantidade(t);
   }
   garantirProdutos();
@@ -931,9 +921,8 @@ adicionarCardBtn.addEventListener('click', () => {
 });
 
 /**
- * Remove todos os cards de uma vez: apaga nome, preço, código, foto e cor de todos os produtos
- * e, nos modelos flexíveis, volta à menor quantidade de cards do modelo (vazios).
- * As fotos salvas no banco continuam lá (aparecem de novo ao digitar o nome do produto).
+ * Remove todos os cards: apaga os dados de todos os produtos e volta ao mínimo de cards.
+ * Antes, guarda a versão no histórico. As fotos do banco não são apagadas.
  */
 removerTodosBtn.addEventListener('click', () => {
   const t = template();
@@ -945,7 +934,6 @@ removerTodosBtn.addEventListener('click', () => {
     ? `Remover todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nTodos os dados e fotos dos cards serão apagados e o encarte ficará com ${sobra} ${sobra === 1 ? 'card vazio' : 'cards vazios'}.`
     : `Apagar os dados de todos os ${n} cards${usados ? ` (${usados} com dados)` : ''}?\n\nEste modelo tem quantidade fixa: os cards ficam vazios.`;
   if (!confirm(msg)) return;
-  // Guarda os cards no "Histórico de cards" antes de apagar (dá para restaurar).
   guardarNoHistorico('limpar');
   state.products = state.products.map(() => novoProduto());
   if (flex) definirQuantidade(t, sobra);
@@ -999,12 +987,11 @@ function syncTemplateUI() {
   const t = template();
   const n = quantidade(t);
   blocks.forEach((b, i) => (b.hidden = i >= n));
-  // Validade: nos modelos que têm datas escritas na arte (ou validade nos cards).
+  // Validade: só nos modelos com datas.
   validityField.hidden = !t.hasValidity && !temDatas(t.id);
 
-  // Adicionar/remover cards só nos modelos com espaço flexível.
   const flex = aceitaCards(t);
-  // "Remover todos" existe em todos os modelos; adicionar/remover vazio só nos flexíveis.
+  // "Remover todos" em todos os modelos; adicionar/remover vazio só nos flexíveis.
   cardsAcoes.hidden = false;
   adicionarCardBtn.hidden = !flex;
   removerVazioBtn.hidden = !flex;
@@ -1014,10 +1001,10 @@ function syncTemplateUI() {
   blocks.forEach((b, i) => {
     b.querySelector<HTMLElement>('[data-act="remove-card"]')!.hidden = !flex || n <= minimoCards(t) || i < inicio || i >= fim;
   });
-  // Títulos dos produtos (ex.: "Super oferta 1" nos grupos com nome).
+  // Títulos dos produtos (ex.: "Super oferta 1").
   const titulos = titulosProdutos(t, n, distribuirGrupos);
   blocks.forEach((b, i) => (b.querySelector<HTMLElement>('.product__title')!.textContent = titulos[i] ?? `Produto ${i + 1}`));
-  // A cor do card existe em todos os modelos (nos que não têm caixa, ela cria um card atrás do produto).
+  // A cor do card existe em todos os modelos.
   const temQuadrado = true;
   const cada = state.squareMode === 'cada';
   coresBox.hidden = !temQuadrado;
@@ -1035,9 +1022,8 @@ function checkService() {
 }
 
 // ---------------------------------------------------------------------------
-// Histórico de cards: as 2 últimas versões dos cards (produtos, fotos, quantidade, modelo).
-// Uma versão é guardada antes de "Remover todos os cards" e ao baixar a imagem.
-// Restaurar troca de lugar com os cards atuais (que vão para o histórico), então nada se perde.
+// Histórico de cards: as 2 últimas versões (salvas ao remover todos e ao baixar a imagem).
+// Restaurar troca a versão com os cards atuais, então nada se perde.
 // ---------------------------------------------------------------------------
 interface VersaoCards {
   quando: number;
@@ -1047,7 +1033,7 @@ interface VersaoCards {
   squareMode: State['squareMode'];
   squareColor: string;
   products: ProductState[];
-  /** Miniatura da arte (JPEG pequeno), quando a imagem permite. */
+  /** Miniatura da arte (JPEG pequeno). */
   miniatura?: string;
 }
 
@@ -1085,13 +1071,13 @@ function salvarHistorico() {
   }
 }
 
-/** Produtos que contam na versão: os do modelo, sem os vazios do fim. */
+/** Produtos da versão (sem os vazios do fim). */
 const produtosDaVersao = (n: number) => {
   const lista = state.products.slice(0, n).map((p) => ({ ...p }));
   while (lista.length && cardVazio(lista[lista.length - 1])) lista.pop();
   return lista;
 };
-/** Mesmo conteúdo (para não repetir a mesma versão no histórico). */
+/** Assinatura do conteúdo (evita versões repetidas). */
 const assinatura = (v: Pick<VersaoCards, 'templateId' | 'quantidade' | 'products'>) =>
   JSON.stringify([v.templateId, v.quantidade, v.products.map((p) => [p.name, p.price, p.unit, p.ean, p.photo, p.fundo, p.cardColor])]);
 
@@ -1108,7 +1094,7 @@ function miniaturaAtual(): string | undefined {
   }
 }
 
-/** Versão com os cards atuais, ou null se não há nenhum card com dados. */
+/** Versão com os cards atuais (null se todos vazios). */
 function versaoAtual(motivo: VersaoCards['motivo']): VersaoCards | null {
   const t = template();
   const n = quantidade(t);
@@ -1120,7 +1106,7 @@ function versaoAtual(motivo: VersaoCards['motivo']): VersaoCards | null {
   };
 }
 
-/** Coloca uma versão no topo do histórico (sem repetir) e guarda só as 2 últimas. */
+/** Põe a versão no topo (sem repetir) e mantém só as 2 últimas. */
 function adicionarAoHistorico(v: VersaoCards | null) {
   if (!v) return;
   const a = assinatura(v);
@@ -1129,7 +1115,7 @@ function adicionarAoHistorico(v: VersaoCards | null) {
   desenharHistorico();
 }
 
-/** Guarda os cards atuais no histórico (chamado antes de limpar e ao baixar a imagem). */
+/** Guarda os cards atuais no histórico. */
 function guardarNoHistorico(motivo: VersaoCards['motivo']) {
   adicionarAoHistorico(versaoAtual(motivo));
 }
@@ -1179,7 +1165,7 @@ function restaurarVersao(i: number) {
     (atual ? '\n\nOs cards atuais vão para o histórico (dá para voltar depois).' : '');
   if (!confirm(msg)) return;
 
-  // Troca: a versão restaurada sai do histórico e os cards atuais entram no lugar.
+  // A versão sai do histórico e os cards atuais entram no lugar.
   historico = historico.filter((_, j) => j !== i);
   if (modelo) state.templateId = modelo.id;
   const t = template();
@@ -1193,7 +1179,7 @@ function restaurarVersao(i: number) {
   salvarHistorico();
   desenharHistorico();
 
-  // Atualiza a tela: modelo escolhido, cores e formulários dos produtos.
+  // Atualiza a tela.
   document.querySelectorAll<HTMLInputElement>('input[name="modelo"]').forEach((r) => (r.checked = r.value === state.templateId));
   coresBox.querySelectorAll<HTMLInputElement>('input[name="modoCor"]').forEach((r) => (r.checked = r.value === state.squareMode));
   seletorTodos.marcar(state.squareColor);
@@ -1218,7 +1204,7 @@ downloadBtn.addEventListener('click', async () => {
   } finally {
     downloadBtn.disabled = false;
   }
-  // Encarte pronto: guarda esta versão dos cards no histórico.
+  // Guarda esta versão no histórico.
   guardarNoHistorico('baixar');
   try {
     canvas.toBlob((blob) => {

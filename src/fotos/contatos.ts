@@ -1,5 +1,4 @@
-// Contatos do Supermercado Forte escritos nas artes que vêm com dados de exemplo
-// (telefone, WhatsApp, endereço, site). Os dados certos:
+// Contatos do Forte no lugar dos dados de exemplo das artes:
 //   Telefone: 3531-1618 · WhatsApp: (32) 98465-4138
 //   Endereço: Av. José Rezende Brando, Nº 801 — Bom Pastor, Ubá/MG
 import { eraseRect } from '../produto/render';
@@ -17,9 +16,9 @@ export const CONTATOS = {
 };
 
 type Local =
-  /** Apaga (refazendo o fundo pelas bordas) e escreve os textos no mesmo estilo da arte. */
+  /** Apaga e reescreve os textos no estilo da arte. */
   | { tipo: 'texto'; apagar: EraseRect[]; textos: (EstiloTexto & { texto: string })[] }
-  /** Copia um trecho de outra arte igual que já tem os contatos certos (mesmo lugar). */
+  /** Copia o trecho de outra arte igual que já tem os contatos certos. */
   | { tipo: 'copiar'; de: string; rect: Rect };
 
 const branco = (caixa: Rect, texto: string, peso: number, tamanho: number, maxLinhas = 1): EstiloTexto & { texto: string } => ({
@@ -57,7 +56,7 @@ function carregar(src: string): Promise<HTMLImageElement> {
 
 const cache = new Map<string, HTMLCanvasElement>();
 
-/** Imagem base com os contatos certos do Forte (ou a mesma imagem, se a arte já estiver certa). */
+/** Arte com os contatos do Forte (ou a mesma, se já estiver certa). */
 export async function baseComContatos(
   id: string, img: HTMLImageElement | HTMLCanvasElement, largura: number, altura: number,
 ): Promise<HTMLImageElement | HTMLCanvasElement> {

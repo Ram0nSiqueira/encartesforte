@@ -29,44 +29,36 @@ export interface RenderOptions {
 }
 
 /**
- * Ajuste do tamanho dos cards escolhido pelo usuário.
- * - 'padrao': como o modelo (cards crescem/diminuem mantendo a proporção original);
- * - 'largura' / 'altura' / 'ambos': além disso, o card estica nessa direção até ocupar o espaço
- *   livre da ÁREA DOS PRODUTOS (nunca passa dela, então topo, rodapé e decorações não mudam).
- * `quanto` (0 a 1): quanto do espaço livre usar.
- * Dentro do card, o espaço extra vai para a FOTO; o nome acompanha.
- * `preco` (padrão true): a etiqueta de preço cresce junto com o card (ver escalaPreco).
+ * Tamanho dos cards escolhido pelo usuário.
+ * 'padrao' = proporção do modelo; 'largura'/'altura'/'ambos' = estica até o espaço livre da
+ * área dos produtos (`quanto`: 0 a 1). O extra vai para a foto. `preco`: preço cresce junto.
  */
 export type ModoCard = 'padrao' | 'largura' | 'altura' | 'ambos';
 export interface AjusteCard { modo: ModoCard; quanto: number; preco?: boolean }
 
-/** Quanto o card pode esticar numa direção, além do tamanho proporcional (2 = o dobro). */
+/** Máximo que o card estica numa direção (2.2 = 2,2× o tamanho proporcional). */
 const ESTICAR_MAX = 2.2;
 
-/** Maior aumento da etiqueta de preço em relação ao tamanho proporcional do modelo. */
+/** Preço automático: aumento máximo e fração máxima da largura do card. */
 const PRECO_MAX = 1.6;
-/** A etiqueta crescida pode ocupar no máximo esta fração da largura do card. */
 const PRECO_LARGURA_MAX = 0.9;
 
 /**
- * Quanto a etiqueta de preço cresce num card esticado: acompanha o maior ganho do card
- * (largura ou altura), sem passar de PRECO_MAX, sem sair da largura do card e tomando no
- * máximo metade da altura extra (mais um pouco da foto), para nada se sobrepor.
- * `larguraEtiqueta` = 0 quando o texto do preço já se ajusta sozinho à largura do card.
+ * Escala da etiqueta de preço (1 = tamanho do modelo).
+ * Manual: o valor pedido, limitado ao que cabe. Automático: acompanha o crescimento do card.
+ * Nunca passa da largura livre nem toma da foto mais que o permitido.
  */
 function escalaPreco(
   ajuste: AjusteCard | undefined,
   card: { w: number; h: number }, core: { w: number; h: number },
   etiqueta: { w: number; h: number }, fotoH: number,
   manual?: number,
-  /** Largura onde a etiqueta pode ficar (o card todo, ou só a faixa ao lado da foto). */
+  /** Largura onde a etiqueta pode ficar (card todo ou só a faixa ao lado da foto). */
   larguraLivre = card.w,
 ) {
   if (etiqueta.h <= 0) return 1;
   if (manual != null) {
-    // Tamanho escolhido pelo usuário: diminuir é sempre possível; aumentar, só até o que cabe.
-    // Quando a largura acaba, a etiqueta ainda pode crescer um pouco só na altura
-    // (PRECO_SO_ALTURA), com números maiores; ver `geometria`.
+    // Diminuir sempre pode; aumentar só até caber (sem largura, cresce um pouco na altura).
     if (manual <= 1) return Math.max(PRECO_MANUAL_MIN, manual);
     const porLargura = etiqueta.w > 0 ? ((larguraLivre * PRECO_MANUAL_LARGURA) / etiqueta.w) * PRECO_SO_ALTURA : Infinity;
     const porAltura = 1 + (0.5 * Math.max(0, card.h - core.h) + PRECO_MANUAL_FOTO * fotoH) / etiqueta.h;
@@ -82,52 +74,45 @@ function escalaPreco(
 }
 
 /**
- * Tamanho do preço escolhido pelo usuário: 'auto' (acompanha o card, ver AjusteCard.preco) ou
- * 'manual' com `escala` sobre o tamanho do modelo (1 = original). No manual o preço pode crescer
- * mesmo sem o card esticar: a foto cede até PRECO_MANUAL_FOTO da altura e o nome sobe junto,
- * sempre dentro do card (nunca por cima da foto, do nome ou fora da área dos produtos).
+ * Tamanho do preço: 'auto' (acompanha o card) ou 'manual' (`escala` sobre o modelo, 1 = original).
+ * No manual a foto cede até PRECO_MANUAL_FOTO da altura; o preço nunca sai do card.
  */
 export type TamanhoPreco = { modo: 'auto' } | { modo: 'manual'; escala: number };
 const PRECO_MANUAL_MIN = 0.5;
 const PRECO_MANUAL_MAX = 2.2;
 const PRECO_MANUAL_LARGURA = 0.95;
 const PRECO_MANUAL_FOTO = 0.45;
-/** Sem largura livre, a etiqueta cresce até este tanto a mais só na altura (proporção muda pouco). */
+/** Sem largura livre, a etiqueta ainda cresce até 1.35× só na altura. */
 const PRECO_SO_ALTURA = 1.35;
 
-/**
- * Largura disponível para a etiqueta: o card todo quando ela fica na coluna da foto (embaixo
- * ou por cima dela); só a faixa ao lado quando a foto fica ao lado do preço (ela não é coberta).
- */
+/** Faixa horizontal do preço: o card todo, ou só o lado oposto à foto (sem cobri-la). */
 function faixaPreco(est: EstiloCelula, cel: { x: number; w: number }, coreW: number): { x0: number; x1: number } {
   const f = est.foto, pr = est.preco;
   if (pr.x < f.x + f.w && f.x < pr.x + pr.w) return { x0: cel.x, x1: cel.x + cel.w };
-  const extra = cel.w - coreW; // a coluna da foto fica com a largura extra do card
+  const extra = cel.w - coreW; // a largura extra do card fica com a foto
   if (pr.x >= f.x + f.w) return { x0: cel.x + (f.x + f.w) * coreW + extra, x1: cel.x + cel.w };
   return { x0: cel.x, x1: cel.x + f.x * coreW };
 }
-/** Largura da faixa do preço num card de largura `w` (nunca menor que a etiqueta original). */
+/** Largura da faixa do preço (nunca menor que a etiqueta original). */
 const larguraFaixa = (est: EstiloCelula, w: number, coreW: number) => {
   const fx = faixaPreco(est, { x: 0, w }, coreW);
   return Math.max(fx.x1 - fx.x0, est.preco.w * coreW);
 };
 const escalaManual = (p: TamanhoPreco | undefined) => (p?.modo === 'manual' ? p.escala : undefined);
 
-/** Maior aumento do preço aplicado na última prévia (1 = nenhum). */
+/** Resultado da última prévia, mostrado na tela: maior/menor escala do preço e se foi limitado. */
 let ganhoPreco = 1;
-/** Menor escala de preço aplicada (para mostrar quando o usuário diminui). */
 let menorPreco = 1;
-/** O tamanho manual pedido não coube em algum card (foi limitado)? */
 let precoLimitado = false;
 
-/** Tamanho final do card numa direção: cresce até o espaço livre (limitado), conforme o ajuste. */
+/** Tamanho final do card numa direção, conforme o ajuste (até o espaço livre). */
 function esticar(atual: number, livre: number, ajuste: AjusteCard | undefined, eixo: 'largura' | 'altura') {
   if (!ajuste || (ajuste.modo !== eixo && ajuste.modo !== 'ambos')) return atual;
   const q = Math.min(1, Math.max(0, ajuste.quanto));
   return atual + Math.max(0, Math.min(livre, atual * ESTICAR_MAX) - atual) * q;
 }
 
-/** Maior ganho aplicado na última prévia (1 = nenhum), para mostrar ao usuário. */
+/** Maior crescimento do card na última prévia (1 = nenhum), mostrado na tela. */
 let ganhoCard = { w: 1, h: 1 };
 const registrarGanho = (w: number, h: number, preco = 1) => {
   ganhoCard = { w: Math.max(ganhoCard.w, w), h: Math.max(ganhoCard.h, h) };
@@ -135,24 +120,20 @@ const registrarGanho = (w: number, h: number, preco = 1) => {
   menorPreco = Math.min(menorPreco, preco);
 };
 
-/** O modelo permite ajustar o tamanho dos cards? (os de posições fixas, como os selos, não). */
+/** O modelo aceita ajuste de tamanho dos cards/preço? (os de posição fixa, "selos", não) */
 export const aceitaAjusteCard = (t: PhotoTemplate) => t.kind !== 'selos';
 
-/**
- * Tamanho do nome escolhido pelo usuário: uma escala sobre o tamanho do modelo
- * (Pequeno 0.8, Médio 1, Grande 1.35, Extra grande 1.7) ou um tamanho exato em px
- * (na imagem final). A área do nome cresce/diminui junto e a foto ocupa o restante.
- */
+/** Tamanho do nome: escala sobre o modelo (P 0.8 … GG 1.7) ou px exato. A foto cede o espaço. */
 export type TamanhoNome = { modo: 'escala'; escala: number } | { modo: 'px'; px: number };
 
-/** Fator sobre o tamanho máximo do modelo (`maxSize` já na escala do card). */
+/** Fator do nome sobre o tamanho máximo do modelo (entre 0.4 e 3). */
 function fatorNome(tam: TamanhoNome | undefined, maxSize: number) {
   if (!tam) return 1;
   const f = tam.modo === 'px' ? tam.px / Math.max(1, maxSize) : tam.escala;
   return Math.min(3, Math.max(0.4, f));
 }
 
-/** Maior tamanho de nome desenhado na última prévia (px), para mostrar ao usuário. */
+/** Maior nome desenhado na última prévia (px), mostrado na tela. */
 let tamanhoNomeDesenhado = 0;
 const registrarTamanhoNome = (px: number) => { tamanhoNomeDesenhado = Math.max(tamanhoNomeDesenhado, px); };
 
@@ -196,10 +177,9 @@ interface TextoAjustado {
 }
 
 /**
- * Ajusta automaticamente um texto dentro de uma área: escolhe o MAIOR tamanho de fonte
- * (de maxSize até minSize) e o número de linhas (1..maxLines) em que tudo cabe.
- * `largura(y)` dá a largura disponível na altura y — permite áreas não retangulares (ex.: círculo).
- * Nunca deixa o texto sair da área: no último caso quebra palavras longas e encurta com "…".
+ * Encaixa um texto numa área: usa a maior fonte e o menor nº de linhas em que tudo cabe.
+ * `largura(y)` = largura disponível na altura y (permite áreas redondas).
+ * Se nada couber, quebra palavras e corta com "…" — o texto nunca sai da área.
  */
 function ajustarTexto(
   ctx: CanvasRenderingContext2D, text: string, weight: number,
@@ -209,7 +189,7 @@ function ajustarTexto(
   const entrelinha = opts.entrelinha ?? 1.08;
   const altura = opts.bottom - opts.top;
 
-  /** Posições (linhas de base) de n linhas centralizadas verticalmente na área. */
+  /** Linhas de base de n linhas centralizadas na área. */
   const posicoes = (n: number, size: number) => {
     const lh = size * entrelinha;
     const total = lh * (n - 1) + size * 0.75; // altura das maiúsculas na última linha
@@ -217,10 +197,10 @@ function ajustarTexto(
     return Array.from({ length: n }, (_, k) => inicio + k * lh);
   };
   const cabeAltura = (n: number, size: number) => size * entrelinha * (n - 1) + size * 0.8 <= altura + 0.5;
-  /** Largura útil de uma linha: o ponto mais estreito entre o topo das letras e a base. */
+  /** Largura útil da linha (o ponto mais estreito da altura das letras). */
   const larguraLinha = (base: number, size: number) => Math.min(opts.largura(base - size * 0.78), opts.largura(base + size * 0.05));
 
-  /** Distribui as palavras em n linhas, respeitando a largura de cada linha. */
+  /** Distribui as palavras em n linhas (null = não coube). */
   const distribuir = (n: number, ys: number[], size: number, quebrarPalavras: boolean): string[] | null => {
     const fila = [...words];
     const linhas: string[] = [];
@@ -261,7 +241,7 @@ function ajustarTexto(
     }
   }
 
-  // Último caso: tamanho mínimo, linhas máximas, e o resto encurtado com "…".
+  // Último caso: fonte mínima e o resto cortado com "…".
   const size = opts.minSize;
   font(ctx, weight, size);
   let n = opts.maxLines;
@@ -286,7 +266,7 @@ function ajustarTexto(
   return { lines: linhas, ys, size };
 }
 
-/** Desenha a foto: recortes soltos com sombra; fotos comuns numa moldura arredondada. */
+/** Desenha a foto inteira na caixa: recorte solto com sombra, ou foto com fundo em moldura arredondada. */
 function drawPhoto(
   ctx: CanvasRenderingContext2D, photo: PreparedPhoto, box: Rect,
   opts: { frameRadius: number; frameBorder: string; align: 'bottom' | 'center' },
@@ -305,7 +285,7 @@ function drawPhoto(
     ctx.restore();
     return;
   }
-  // Foto com fundo (branco ou original): inteira (sem cortes), centralizada, com cantos arredondados.
+  // Foto com fundo: inteira, centralizada, cantos arredondados.
   const k = Math.min(box.w / img.width, box.h / img.height);
   const w = img.width * k, h = img.height * k;
   const x = box.x + (box.w - w) / 2, y = box.y + (box.h - h) / 2;
@@ -327,10 +307,7 @@ function drawPhoto(
   ctx.restore();
 }
 
-/**
- * Usa as fotos já prontas e devolve as que ainda estão carregando.
- * Com `wait`, espera todas (usado no download).
- */
+/** Fotos prontas + as que ainda carregam. Com `wait`, espera todas (download). */
 async function loadPhotos(products: PhotoProductData[], wait: boolean) {
   const pending: Promise<unknown>[] = [];
   const photos = await Promise.all(
@@ -360,19 +337,15 @@ type TemplateCartoes = Extract<PhotoTemplate, { kind: 'cartoes' }>;
 
 export interface LayoutCartoes {
   cards: Rect[];
-  /** Escala dos cards em relação ao card original (1 = mesmo tamanho). */
+  /** Escala sobre o card original (1 = mesmo tamanho). */
   k: number;
-  /** Remontar a arte (topo encolhido + cards + rodapé)? false = usar a imagem original como está. */
+  /** true = remontar a arte (topo + cards + rodapé); false = imagem original. */
   remontar: boolean;
   topo?: { escala: number; destino: Rect };
   rodape?: { destino: Rect };
 }
 
-/**
- * Layout inteligente para N cards, todos iguais:
- * testa de 1 a N colunas e escolhe a que deixa os cards MAIORES, respeitando
- * a largura disponível e a menor escala aceitável do topo. O topo só encolhe o necessário.
- */
+/** Layout de N cards iguais: escolhe as colunas que deixam os cards maiores; o topo só encolhe se precisar. */
 export function layoutCartoes(t: TemplateCartoes, n: number, ajuste?: AjusteCard): LayoutCartoes {
   const base = t.cards[0];
   if (!t.flex || n === t.cards.length) {
@@ -386,20 +359,18 @@ export function layoutCartoes(t: TemplateCartoes, n: number, ajuste?: AjusteCard
   const alturaLivre = t.height - rodapeH - folgaRodape - folgaTopo; // topo + cards
   const proporcao = base.h / base.w;
 
-  // Pontuação: cards maiores são melhores, mas encolher o topo tem um custo
-  // (só vale a pena quando o ganho no tamanho dos cards é grande).
+  // Pontuação: cards maiores ganham, mas encolher o topo custa pontos.
   let melhor = { cols: 1, linhas: n, w: 0, pontos: -1 };
   for (let cols = 1; cols <= n; cols++) {
     const linhas = Math.ceil(n / cols);
     const wPorLargura = (f.area.w - (cols - 1) * f.gap) / cols;
-    // 1) Poucos produtos: os cards CRESCEM (até ESCALA_MAX_CARD); para isso o topo pode
-    //    ceder um pouco (no máximo até 80%), continuando bem legível.
+    // 1) Poucos produtos: cards crescem (até ESCALA_MAX_CARD); o topo pode ir a 80%.
     const alturaParaCrescer = alturaLivre - topoH * 0.8;
     const wCrescer = Math.min(
       base.w * ESCALA_MAX_CARD, wPorLargura,
       ((alturaParaCrescer - (linhas - 1) * f.gap) / linhas) / proporcao,
     );
-    // 2) Se nem o tamanho original cabe, encolhe o topo (até o mínimo) e os cards diminuem.
+    // 2) Não cabe nem o original: topo encolhe (até o mínimo) e os cards diminuem.
     const alturaCards = alturaLivre - topoH * f.escalaMinTopo;
     const wPorAltura = ((alturaCards - (linhas - 1) * f.gap) / linhas) / proporcao;
     const w = wCrescer >= base.w ? wCrescer : Math.min(base.w, wPorLargura, wPorAltura);
@@ -417,11 +388,11 @@ export function layoutCartoes(t: TemplateCartoes, n: number, ajuste?: AjusteCard
 
   const inicioCards = topoAltura + folgaTopo;
   const fimCards = t.height - rodapeH - folgaRodape;
-  // Ajuste do usuário: estica os cards no espaço que sobrou (o topo não muda por causa disso).
+  // Ajuste do usuário: estica os cards no espaço que sobrou (o topo não muda).
   const w = esticar(melhor.w, (f.area.w - (melhor.cols - 1) * f.gap) / melhor.cols, ajuste, 'largura');
   const h = esticar(h0, (fimCards - inicioCards - (melhor.linhas - 1) * f.gap) / melhor.linhas, ajuste, 'altura');
   const alturaCards = melhor.linhas * h + (melhor.linhas - 1) * f.gap;
-  // Sobra de altura (quando o topo não precisa encolher): centraliza os cards no espaço livre.
+  // Centraliza os cards na altura livre.
   const yCards = inicioCards + (fimCards - inicioCards - alturaCards) / 2;
 
   const cards: Rect[] = [];
@@ -443,7 +414,7 @@ export function layoutCartoes(t: TemplateCartoes, n: number, ajuste?: AjusteCard
   };
 }
 
-/** Desenha um pedaço da imagem com as bordas esmaecidas (sem "costura" visível no fundo). */
+/** Desenha um pedaço da imagem com bordas esmaecidas (sem emenda visível). */
 function desenharFaixa(
   ctx: CanvasRenderingContext2D, img: CanvasImageSource, src: Rect, dst: Rect,
   esmaecer: { cima?: number; baixo?: number; lados?: number },
@@ -478,11 +449,7 @@ function desenharFaixa(
 
 const topoRecortadoCache = new Map<string, { canvas: HTMLCanvasElement; corPainel: string }>();
 
-/**
- * Prepara o conteúdo do topo para ser colocado sobre um painel mais largo:
- * deixa transparentes os pixels que são só "fundo da página" ou "fundo do painel"
- * (fora do painel e na faixa da borda dele), mantendo título, pessoa, moedas etc.
- */
+/** Topo sem o fundo (só título, pessoa, moedas…), para colocar sobre um painel mais largo. */
 function topoRecortado(base: HTMLImageElement | HTMLCanvasElement, t: TemplateCartoes) {
   const chave = t.src;
   const pronto = topoRecortadoCache.get(chave);
@@ -505,7 +472,7 @@ function topoRecortado(base: HTMLImageElement | HTMLCanvasElement, t: TemplateCa
   const painel = cor(P.amostra.x, P.amostra.y - f.topo.y0);
   const dist = (r: number, g: number, b: number, ref: number[]) =>
     Math.hypot(r - ref[0], g - ref[1], b - ref[2]);
-  const borda = 14; // faixa junto à borda do painel que também é limpa
+  const borda = 14; // borda do painel também é limpa
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
       const yAbs = py + f.topo.y0;
@@ -514,7 +481,7 @@ function topoRecortado(base: HTMLImageElement | HTMLCanvasElement, t: TemplateCa
       if (dentro) continue;
       const i = (py * W + px) * 4;
       const dd = Math.min(dist(d[i], d[i + 1], d[i + 2], pagina), dist(d[i], d[i + 1], d[i + 2], painel));
-      // Perto da cor de fundo = transparente; transição suave até 50 de distância.
+      // Cor perto da do fundo = transparente (transição suave).
       if (dd < 50) d[i + 3] = Math.round(d[i + 3] * Math.max(0, (dd - 22) / 28));
     }
   }
@@ -524,14 +491,10 @@ function topoRecortado(base: HTMLImageElement | HTMLCanvasElement, t: TemplateCa
   return resultado;
 }
 
-/**
- * Remonta a arte para o novo layout: fundo (cores amostradas da margem da imagem original),
- * topo (encolhido sobre um painel na largura toda), rodapé inteiro embaixo.
- * Os cards são desenhados depois.
- */
+/** Remonta a arte para o novo layout: fundo em degradê, topo (encolhido se precisar) e rodapé. */
 function remontarFundo(ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateCartoes, lay: LayoutCartoes) {
   const f = t.flex!;
-  // Fundo: degradê vertical com as cores da margem esquerda da arte original.
+  // Fundo: degradê com as cores da margem esquerda da arte.
   const amostra = document.createElement('canvas');
   amostra.width = t.width;
   amostra.height = t.height;
@@ -550,14 +513,14 @@ function remontarFundo(ctx: CanvasRenderingContext2D, base: HTMLImageElement | H
   if (s >= 0.999) {
     desenharFaixa(ctx, base, topoSrc, lay.topo!.destino, { baixo: 24 });
   } else {
-    // Painel na largura toda (alinhado com os cards), na altura do topo reduzido…
+    // Topo encolhido: painel na largura toda…
     const P = f.painel;
     const { canvas: conteudo, corPainel } = topoRecortado(base, t);
     ctx.fillStyle = corPainel;
     ctx.beginPath();
     ctx.roundRect(P.x, (P.y - f.topo.y0) * s, P.w, P.h * s, P.raio * Math.max(s, 0.7));
     ctx.fill();
-    // …e o conteúdo do topo (título, pessoa, moedas) centralizado sobre ele.
+    // …com o conteúdo do topo centralizado em cima.
     const d = lay.topo!.destino;
     ctx.drawImage(conteudo, d.x, d.y, d.w, d.h);
   }
@@ -572,23 +535,20 @@ function drawCards(
 ) {
   const [y, m, d] = opts.validity.split('-');
   const validityText = d ? `oferta válida até dia ${d}.${m}.${y}` : '';
-  const k = lay.k; // todas as medidas do card original são multiplicadas por k
-  // Nome maior: a parte colorida de cima (foto) diminui e a área do nome cresce.
+  const k = lay.k; // medidas do card original × k
+  // Nome maior: a parte da foto diminui e a área do nome cresce.
   const fn = fatorNome(opts.nome, 18 * k);
   const areaNome = (328 - t.topHeight - 6) * k;
   const delta = Math.max(-areaNome * 0.4, Math.min(areaNome * (fn - 1), t.topHeight * k * 0.4));
-  // Card esticado na altura (ajuste do usuário): o espaço extra vai para a parte da foto,
-  // e nome/preço/validade descem junto. Na largura, tudo já é centralizado no card.
+  // Card mais alto: o extra vai para a foto; nome, preço e validade descem junto.
   const base0 = t.cards[0];
   const extraH = Math.max(0, (lay.cards[0]?.h ?? 0) - base0.h * k);
-  // Preço acompanha o card esticado: cresce para cima (a linha de base não muda), e a foto e o
-  // nome sobem o mesmo tanto. A largura já é controlada pelo ajuste do texto ao card.
+  // Preço maior cresce para cima; foto e nome sobem o mesmo tanto.
   const c0 = lay.cards[0];
   const sp0 = c0
     ? escalaPreco(opts.card, c0, { w: base0.w * k, h: base0.h * k }, { w: 0, h: 34 * k * 0.75 }, (t.topHeight * k - delta) + extraH, escalaManual(opts.preco))
     : 1;
-  // O texto do preço precisa caber na largura do card: o aumento fica limitado pelo preço mais
-  // largo (assim a foto não cede espaço que o preço não vai usar). Todos ficam do mesmo tamanho.
+  // Limita pelo preço mais largo (tem que caber no card); todos ficam do mesmo tamanho.
   let sp = sp0;
   if (c0 && sp0 > 1) {
     for (const p of products.slice(0, lay.cards.length)) {
@@ -604,14 +564,14 @@ function drawCards(
     }
     if (escalaManual(opts.preco) != null && sp < sp0 - 0.01) precoLimitado = true;
   }
-  const subirPreco = 34 * k * 0.75 * (sp - 1); // crescimento da altura das letras do preço
+  const subirPreco = 34 * k * 0.75 * (sp - 1); // quanto o preço cresce para cima
   if (c0) registrarGanho(c0.w / (base0.w * k), c0.h / (base0.h * k));
   const topH = t.topHeight * k - delta + extraH - subirPreco;
   const raio = t.radius * k;
 
   lay.cards.forEach((card0, i) => {
     const p = products[i];
-    // Medidas abaixo da foto usam o card sem a altura extra, deslocado para baixo.
+    // `card` = card deslocado pela altura extra (para o que fica abaixo da foto).
     const card = { ...card0, y: card0.y + extraH };
     const cx = card.x + card.w / 2;
 
@@ -627,7 +587,7 @@ function drawCards(
 
     if (!p) return;
 
-    // Foto centralizada dentro do quadrado (com margem), seja recorte ou foto com fundo.
+    // Foto centralizada no quadrado, com margem.
     const photo = photos[i];
     if (photo) {
       const pad = (photo.cutout ? 14 : 12) * k;
@@ -639,7 +599,7 @@ function drawCards(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
 
-    // Nome do produto: ajustado automaticamente entre a foto e o preço (até 3 linhas).
+    // Nome entre a foto e o preço (até 3 linhas).
     const name = p.name.trim();
     if (name) {
       const t2 = ajustarTexto(ctx, name, 600, {
@@ -668,7 +628,7 @@ function drawCards(
       };
       let w = widths();
       while (w.total > card.w - 16 * k && size > 10) { size -= 0.5; w = widths(); }
-      // Tamanho que o preço realmente ficou (o texto encolhe se não couber na largura do card).
+      // Tamanho real do preço (o texto encolhe se não couber).
       const real = size / (34 * k);
       registrarGanho(1, 1, real);
       if (escalaManual(opts.preco) != null && real < sp - 0.01) precoLimitado = true;
@@ -733,8 +693,7 @@ function drawBadge(ctx: CanvasRenderingContext2D, b: Circle, p: PhotoProductData
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
-  // Nome: ajustado automaticamente dentro da parte de cima do selo, respeitando o círculo
-  // (as linhas mais perto da borda têm menos largura). Até 3 linhas.
+  // Nome na parte de cima do selo, respeitando o círculo (até 3 linhas).
   const name = p.name.trim().toUpperCase();
   if (name) {
     const raioUtil = r - 9; // dentro do anel
@@ -819,7 +778,7 @@ function drawBadges(
 // ---------------------------------------------------------------------------
 type Grupo = TemplateGrade['grupos'][number];
 
-/** Quantos produtos cada grupo recebe: os fixos ficam com o padrão; o flexível com o restante. */
+/** Produtos por grupo: os fixos ficam com o padrão; o flexível com o resto. */
 export function distribuirGrupos(t: TemplateGrade, total: number): number[] {
   const fixos = t.grupos.map((g) => (g.max > g.padrao ? 0 : g.padrao));
   const somaFixos = fixos.reduce((a, b) => a + b, 0);
@@ -830,13 +789,12 @@ export function distribuirGrupos(t: TemplateGrade, total: number): number[] {
   return fixos;
 }
 
-/** Quanto um card pode crescer em relação ao tamanho original do modelo (poucos produtos). */
+/** Quanto um card pode crescer sobre o original quando há poucos produtos. */
 export const ESCALA_MAX_CARD = 2.4;
 
 /**
- * Layout inteligente de um grupo: testa de 1 a N colunas e escolhe a que deixa as células
- * MAIORES, mantendo a proporção. Com poucos produtos o card CRESCE (até ESCALA_MAX_CARD) e
- * ocupa o espaço; com muitos, diminui. Foto, nome e preço acompanham o card (tudo em escala k).
+ * Layout de um grupo: escolhe as colunas que deixam os cards maiores (na proporção do modelo),
+ * aplica o ajuste do usuário (esticar) e calcula a escala do preço. k = escala do card.
  */
 function layoutGrupo(g: Grupo, n: number, ajuste?: AjusteCard, manual?: number): { cells: Rect[]; k: number; esticado: boolean; escalaPreco: number } {
   const { w: bw, h: bh } = g.estilo.base;
@@ -846,16 +804,14 @@ function layoutGrupo(g: Grupo, n: number, ajuste?: AjusteCard, manual?: number):
     const wLarg = (g.area.w - (cols - 1) * g.gapX) / cols;
     const hAlt = (g.area.h - (linhas - 1) * g.gapY) / linhas;
     const w = Math.min(bw * (g.escalaMax ?? ESCALA_MAX_CARD), wLarg, hAlt * (bw / bh));
-    // Empate no tamanho: prefere menos linhas (ex.: 3 cards lado a lado em vez de 2 + 1).
+    // Empate: prefere menos linhas.
     if (w > melhor.w + 0.5 || (Math.abs(w - melhor.w) <= 0.5 && linhas < melhor.linhas)) melhor = { cols, linhas, w };
   }
   const k = melhor.w / bw;
-  // Espaços entre cards: diminuem com cards pequenos, mas não crescem além do original
-  // (o tamanho escolhido já conta com o espaço original, então tudo cabe na área).
+  // Espaços entre cards: diminuem com cards pequenos, nunca passam do original.
   const fg = Math.min(1, Math.max(k, 0.6));
   const gx = g.gapX * fg, gy = g.gapY * fg;
-  // Ajuste do usuário: o card estica até ocupar o espaço livre da área (k continua o do
-  // tamanho proporcional; o extra vai para a foto em desenharCelula).
+  // Ajuste do usuário: estica até o espaço livre (o extra vai para a foto).
   const w = esticar(melhor.w, (g.area.w - (melhor.cols - 1) * gx) / melhor.cols, ajuste, 'largura');
   const h = esticar(melhor.w * (bh / bw), (g.area.h - (melhor.linhas - 1) * gy) / melhor.linhas, ajuste, 'altura');
   const alturaTotal = melhor.linhas * h + (melhor.linhas - 1) * gy;
@@ -869,7 +825,7 @@ function layoutGrupo(g: Grupo, n: number, ajuste?: AjusteCard, manual?: number):
     const col = i - linha * melhor.cols;
     cells.push({ x: x0 + col * (w + gx), y: y0 + linha * (h + gy), w, h });
   }
-  // Escala da etiqueta de preço: igual em todos os cards do grupo (ficam padronizados).
+  // Escala do preço: a mesma em todos os cards do grupo.
   const core = { w: melhor.w, h: melhor.w * (bh / bw) };
   const pr = g.estilo.preco;
   const escalaPrecoGrupo = escalaPreco(
@@ -879,16 +835,9 @@ function layoutGrupo(g: Grupo, n: number, ajuste?: AjusteCard, manual?: number):
 }
 
 /**
- * Posições das partes do card (frações do card original) dentro da célula desenhada.
- * Célula na proporção original: simples escala. Célula esticada (ajuste do usuário): a faixa
- * da FOTO absorve o espaço extra; o que fica antes dela não se move e o que fica depois
- * desliza junto. Caixa/fundo/foto esticam; nome estica só na largura; selo mantém o tamanho.
- *
- * Preço (`sp` = escala da etiqueta, 1 = tamanho proporcional): cresce sem deformar, com a
- * base fixa (cresce para cima, em direção à foto) e centralizado, sem sair do card. Para não
- * sobrepor nada: um nome empilhado entre a foto e o preço sobe junto; um nome ao lado da foto
- * (acima do preço) encolhe por baixo; a foto encolhe por baixo quando o preço fica abaixo dela
- * (se o preço fica por cima da foto, como selo, ela não muda).
+ * Posição de cada parte do card (foto, nome, preço…) na célula desenhada.
+ * Card esticado: a faixa da foto absorve o espaço extra; o resto mantém o tamanho e acompanha.
+ * Preço maior (`sp`): cresce para cima sem sair do card; a foto e o nome cedem espaço, sem sobrepor.
  */
 function geometria(cel: Rect, k: number, est: EstiloCelula, sp = 1) {
   const cw = est.base.w * k, ch = est.base.h * k;
@@ -910,27 +859,26 @@ function geometria(cel: Rect, k: number, est: EstiloCelula, sp = 1) {
   const cruzaX = (a: RelRect, b: RelRect) => a.x < b.x + b.w && b.x < a.x + a.w;
   const centro = (r: RelRect) => r.y + r.h / 2;
   const precoBase = movida(pr);
-  const subir = precoBase.h * (Math.max(1, sp) - 1); // quanto a etiqueta cresce para cima
+  const subir = precoBase.h * (Math.max(1, sp) - 1); // quanto o preço cresce para cima
   const preco = (): Rect => {
     if (sp === 1) return precoBase;
-    // Faixa onde a etiqueta pode ficar (nunca invade a coluna de uma foto ao lado).
     const fx = faixaPreco(est, cel, cw);
     const x0 = Math.min(fx.x0, precoBase.x), x1 = Math.max(fx.x1, precoBase.x + precoBase.w);
-    // Largura: cresce até 95% da faixa; o resto do aumento (pouco) é só na altura.
+    // Largura até 95% da faixa; o que passar disso cresce só na altura.
     const w = Math.max(precoBase.w * Math.min(1, sp), Math.min(precoBase.w * sp, (x1 - x0) * PRECO_MANUAL_LARGURA));
     const h = precoBase.h * sp;
     const cx = precoBase.x + precoBase.w / 2;
     const x = Math.min(Math.max(cx - w / 2, x0), x1 - w);
     return { x, y: precoBase.y + precoBase.h - h, w, h };
   };
-  /** Nome empilhado entre a foto e o preço (mesma coluna, abaixo do meio da foto). */
+  /** Nome empilhado entre a foto e o preço. */
   const nomeEntre = (r: RelRect) => cruzaX(r, f) && cruzaX(r, pr) && centro(r) > centro(f) && centro(r) < centro(pr);
   const nome = (r: RelRect): Rect => {
     const e = esticada(r), m = movida(r);
     const out = { x: e.x, w: e.w, y: m.y, h: m.h };
     if (!subir || !cruzaX(r, pr) || centro(r) >= centro(pr)) return out;
     if (nomeEntre(r)) return { ...out, y: out.y - subir };
-    // Nome ao lado da foto, acima do preço: a parte de baixo cede (o texto se ajusta sozinho).
+    // Nome acima do preço, ao lado da foto: encolhe por baixo.
     const limite = preco().y - 2 * k;
     const fim = Math.min(out.y + out.h, limite);
     const ini = Math.max(cel.y, Math.min(out.y, fim - out.h * 0.6));
@@ -938,9 +886,7 @@ function geometria(cel: Rect, k: number, est: EstiloCelula, sp = 1) {
   };
   const foto = (): Rect => {
     const r = esticada(f);
-    // Preço na mesma coluna e abaixo do meio da foto (embaixo dela ou por cima do canto de
-    // baixo): a foto encolhe por baixo o mesmo tanto que o preço cresce, então o preço nunca
-    // cobre mais da foto do que no modelo original.
+    // Preço abaixo da foto (ou sobre o canto de baixo): a foto encolhe o mesmo tanto que ele cresce.
     if (!subir || !cruzaX(f, pr) || centro(pr) <= centro(f)) return r;
     return { ...r, h: Math.max(0, r.h - subir) };
   };
@@ -966,10 +912,7 @@ function caixaDaForma(f: Forma): Rect {
 
 const cruza = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-/**
- * Copia de volta, da imagem original, as partes indicadas (decorações que devem aparecer).
- * Com `evitar`, uma decoração que ficaria por cima/embaixo de um card é omitida.
- */
+/** Copia de volta da arte original as decorações indicadas (pula as que cruzam `evitar`). */
 function restaurar(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
   formas: FormaRestaurar[] | undefined, padrao: boolean, evitar: Rect[] = [],
@@ -979,7 +922,7 @@ function restaurar(
     const caixa = caixaDaForma(f);
     if (!f.manterSobCards && evitar.some((c) => cruza(c, caixa))) continue;
     if (f.tipo === 'circulo' && f.exceto?.length && f.esfumar) {
-      // Recorte com borda esfumada (a decoração some suavemente onde ficava o card original).
+      // Recorte com borda esfumada (some suavemente onde ficava o card original).
       const c = caixaDaForma(f);
       const off = document.createElement('canvas');
       off.width = Math.ceil(c.w); off.height = Math.ceil(c.h);
@@ -1053,8 +996,7 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
   const { int, cents } = splitPrice(price);
   const u = unit.trim();
   const textoUnidade = e.unidade === 'nenhuma' || !u ? '' : (e.formatoUnidade ?? '{U}').replace('{U}', u.toUpperCase()).replace('{u}', u);
-  // Com círculo do "R$": o círculo ocupa a ponta esquerda e o valor fica no restante.
-  // Círculo do "R$": com `circuloRaio` menor, fica pequeno e "pendurado" na ponta esquerda.
+  // Círculo do "R$" na ponta esquerda (com `circuloRaio` menor, fica "pendurado" na ponta).
   const circulo = e.circuloMoeda ? r.h * (e.circuloRaio ?? 0.5) : 0;
   const cxCirculo = e.circuloRaio ? r.x + circulo * 0.15 : r.x + circulo;
   if (e.circuloMoeda) {
@@ -1146,10 +1088,7 @@ function desenharEtiqueta(ctx: CanvasRenderingContext2D, r: Rect, e: EstiloPreco
   }
 }
 
-/**
- * Plaquinha de madeira (tábua arredondada com veios e cordinhas nas pontas) atrás do nome.
- * Devolve a área interna onde o texto deve caber.
- */
+/** Plaquinha de madeira atrás do nome; devolve a área interna para o texto. */
 function desenharPlaca(ctx: CanvasRenderingContext2D, r: Rect, c: { cor: string; escura: string; clara: string; corda: string }, k: number): Rect {
   const corda = Math.min(r.w * 0.05, 14 * k);
   const x = r.x + corda, w = r.w - corda * 2, y = r.y, h = r.h;
@@ -1216,11 +1155,7 @@ function alturaCurva(pts: [number, number][], x: number) {
   return pts[pts.length - 1][1];
 }
 
-/**
- * Fundo com duas regiões separadas por uma curva: acima, a textura de um trecho limpo da
- * imagem original (espelhada para não ter emendas); abaixo, cor lisa. Bordas da área se
- * misturam com a imagem original.
- */
+/** Refaz um fundo dividido por uma curva: textura da arte acima, cor lisa abaixo, bordas misturadas. */
 function limparCurva(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
   l: Extract<TemplateGrade['limpar'][number], { tipo: 'curva' }>,
@@ -1269,10 +1204,8 @@ function parseRgb(cor: string): [number, number, number] {
   return [m?.[0] ?? 0, m?.[1] ?? 0, m?.[2] ?? 0];
 }
 
-/** Área do nome e da foto na célula, já com o tamanho do nome escolhido pelo usuário. */
+/** Área do nome e da foto na célula, com o tamanho do nome escolhido (a foto cede o espaço). */
 function partesCelula(cel: Rect, k: number, est: EstiloCelula, tam?: TamanhoNome, sp = 1) {
-  // Tamanho do nome escolhido: a área do nome cresce (ou diminui) em direção à foto,
-  // e a foto fica com o espaço que sobra.
   const fn = fatorNome(tam, est.nome.estilo.tamanhoMax * k);
   const geo = geometria(cel, k, est, sp);
   const nomeR = geo.nome(est.nome);
@@ -1287,9 +1220,8 @@ function partesCelula(cel: Rect, k: number, est: EstiloCelula, tam?: TamanhoNome
 }
 
 /**
- * Cards esticados na altura: a foto só cresce até bater na largura do card (ela não é cortada).
- * O que sobrar seria um vão vazio entre nome, foto e preço, então cada LINHA de cards encolhe
- * até a altura que a maior foto dela realmente usa (os cards da linha continuam alinhados).
+ * Card esticado na altura: encolhe cada linha até a altura que as fotos realmente usam
+ * (evita vãos vazios) e reempilha as linhas centralizadas.
  */
 function compactarLinhas(
   cells: Rect[], k: number, g: Grupo, photos: (PreparedPhoto | null)[], tam?: TamanhoNome, sp = 1,
@@ -1309,7 +1241,7 @@ function compactarLinhas(
     const h = cells[idx[0]].h;
     const extra = h - altProporcional;
     const comFoto = idx.filter((i) => photos[i]);
-    if (extra <= 0.5 || !comFoto.length) return h; // sem fotos ainda: mantém o tamanho escolhido
+    if (extra <= 0.5 || !comFoto.length) return h; // sem fotos: mantém
     let sobra = Infinity;
     for (const i of comFoto) {
       const { fotoR } = partesCelula(cells[i], k, est, tam, sp);
@@ -1322,7 +1254,7 @@ function compactarLinhas(
     return corte > 0.5 ? h - corte : h;
   });
   if (!mudou) return;
-  // Reempilha as linhas (mesmo espaço entre elas) e centraliza o bloco na área do grupo.
+  // Reempilha as linhas e centraliza na área.
   const total = alturas.reduce((s, h) => s + h, 0) + gapLinhas * (linhas.length - 1);
   let y = g.area.y + (g.area.h - total) / 2;
   linhas.forEach((idx, li) => {
@@ -1364,7 +1296,7 @@ function desenharCelula(
     }
     ctx.restore();
   } else if (p?.cardColor) {
-    // Modelo sem caixa: a cor escolhida vira um card arredondado atrás do produto.
+    // Modelo sem caixa: a cor escolhida vira um card atrás do produto.
     const pad = 6 * k;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.25)';
@@ -1422,7 +1354,7 @@ function desenharCelula(
     const texto = (s.prefixo ?? '') + (s.maiusculas ? nome.toUpperCase() : nome);
     const peso = s.peso;
     const it = s.italico ? 'italic ' : '';
-    // ajustarTexto usa a fonte padrão; o itálico é aplicado no desenho (mesma largura aproximada).
+    // O itálico só entra no desenho (largura quase igual).
     const t2 = ajustarTexto(ctx, texto, peso, {
       maxSize: s.tamanhoMax * k * fn, minSize: Math.max(6, s.tamanhoMin * k * Math.min(fn, 1.5)),
       maxLines: s.maxLinhas + (fn > 1.25 ? 1 : 0),
@@ -1448,9 +1380,8 @@ function desenharCelula(
 }
 
 /**
- * Refaz um fundo em degradê a partir de colunas de referência (lidas da imagem ORIGINAL).
- * Coluna sem `pontos`: amostrada em toda a altura (suavizada). Com `pontos`: só naquelas
- * alturas, interpolando entre elas. Entre colunas, interpolação suave (cosseno) + leve granulado.
+ * Refaz um fundo em degradê a partir de colunas da arte original (inteiras ou só nos `pontos`),
+ * interpolando entre elas, com textura opcional e leve granulado.
  */
 function limparPorColunas(
   ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, t: TemplateGrade,
@@ -1505,12 +1436,12 @@ function limparPorColunas(
     return { x: c.x, perfil };
   });
 
-  // Linha da imagem logo acima da área (suavizada na horizontal), para a transição do topo.
+  // Linha logo acima da área (suavizada), para a transição do topo.
   const mesclar = l.mesclarTopo ?? 0;
   let topo: number[][] = [];
   if (mesclar > 0 && r.y >= 4) {
     const bruto = Array.from({ length: r.w }, (_, x) => media(r.x + x, r.y - 3, 2));
-    const raio = 36; // suavização horizontal forte: evita listras verticais na transição
+    const raio = 36; // suavização forte: evita listras verticais
     topo = bruto.map((_, x) => {
       const acc = [0, 0, 0];
       let n = 0;
@@ -1522,8 +1453,7 @@ function limparPorColunas(
     });
   }
 
-  // Textura: só o detalhe fino de um trecho limpo (pixel − média local), sem a iluminação do
-  // trecho, para não criar faixas ao repetir.
+  // Textura: só o detalhe fino de um trecho limpo (pixel − média local), para repetir sem faixas.
   let tex: { det: Float32Array; w: number; h: number; k: number } | null = null;
   if (l.detalhe) {
     const q = l.detalhe.rect;
@@ -1554,7 +1484,7 @@ function limparPorColunas(
 
   const img = ctx.createImageData(r.w, r.h);
   for (let y = 0; y < r.h; y++) {
-    // Peso da linha de cima: 1 no topo da área, caindo suavemente até 0 em `mesclar` px.
+    // Peso da linha de cima: 1 no topo, cai até 0 em `mesclar` px.
     const wTopo = topo.length && y < mesclar ? (1 + Math.cos((Math.PI * y) / mesclar)) / 2 : 0;
     for (let x = 0; x < r.w; x++) {
       const xx = r.x + x;
@@ -1598,7 +1528,7 @@ function desenharForma(
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'butt';
-  // Contorno mais largo (anel externo) primeiro; o interior cobre a metade de dentro dele.
+  // Contorno mais largo primeiro; o interior cobre a metade de dentro dele.
   const [externo, ...internos] = d.contornos;
   if (externo) {
     linha();
@@ -1611,7 +1541,7 @@ function desenharForma(
   if ('cor' in d.preenchimento) {
     ctx.fillStyle = d.preenchimento.cor;
   } else {
-    // Textura: um pedaço da imagem ORIGINAL repetido (ex.: o pontilhado do selo).
+    // Textura: pedaço da arte original repetido.
     const r = d.preenchimento.textura;
     const tile = document.createElement('canvas');
     tile.width = r.w;
@@ -1630,17 +1560,13 @@ function desenharForma(
   void t;
 }
 
-/**
- * Devolve a textura fina (ex.: pontinhos do fundo) a uma área apagada: soma o detalhe
- * (pixel − média do trecho) de um trecho limpo, repetido alinhado às coordenadas da imagem.
- * O trecho deve ter tamanho múltiplo do período do padrão.
- */
+/** Devolve a textura fina (ex.: pontinhos) a uma área apagada, repetindo um trecho limpo da arte. */
 function somarTextura(ctx: CanvasRenderingContext2D, r: Rect, tile: ImageData, q: Rect) {
   const media = [0, 0, 0];
   for (let i = 0; i < tile.data.length; i += 4) for (let k = 0; k < 3; k++) media[k] += tile.data[i + k];
   for (let k = 0; k < 3; k++) media[k] /= tile.data.length / 4;
   const area = ctx.getImageData(r.x, r.y, r.w, r.h);
-  // Some nas bordas para não marcar a emenda com a imagem original.
+  // Some nas bordas (sem emenda).
   const borda = 6;
   for (let y = 0; y < r.h; y++) {
     const ty = (((r.y + y - q.y) % q.h) + q.h) % q.h;
@@ -1678,9 +1604,7 @@ function drawGrade(
 
   const qtd = distribuirGrupos(t, products.length);
   const layouts = t.grupos.map((g, gi) => layoutGrupo(g, qtd[gi], ajuste, manual));
-  // Cards esticados: sem vãos vazios onde a foto não consegue crescer. O preço é recalculado
-  // pelo tamanho FINAL do card (proporcional ao que o card realmente cresceu); como isso muda
-  // o espaço da foto, repete algumas vezes até estabilizar.
+  // Cards esticados: tira os vãos vazios e recalcula o preço pelo tamanho final (repete até estabilizar).
   {
     let ini = 0;
     layouts.forEach((l, gi) => {
@@ -1690,7 +1614,7 @@ function drawGrade(
       const core = { w: g.estilo.base.w * l.k, h: g.estilo.base.h * l.k };
       for (let passo = 0; passo < 3 && l.cells.length; passo++) {
         compactarLinhas(l.cells, l.k, g, fotos, tam, l.escalaPreco);
-        // Menor card do grupo: a etiqueta tem que caber em todos (e fica igual em todos).
+        // Usa o menor card: o preço tem que caber em todos.
         const w = Math.min(...l.cells.map((c) => c.w)), h = Math.min(...l.cells.map((c) => c.h));
         const pr = g.estilo.preco;
         const novo = escalaPreco(ajuste, { w, h }, core, { w: pr.w * core.w, h: pr.h * core.h }, g.estilo.foto.h * core.h + (h - core.h), manual, larguraFaixa(g.estilo, w, core.w));
@@ -1704,7 +1628,7 @@ function drawGrade(
     const b = t.grupos[gi].estilo.base;
     for (const c of l.cells) registrarGanho(c.w / (b.w * l.k), c.h / (b.h * l.k), l.escalaPreco);
   });
-  // Área ocupada por cada card (foto + nome + preço), para não sobrepor decorações.
+  // Área de cada card, para as decorações não ficarem por cima.
   const ocupadas = layouts.flatMap((l, gi) =>
     l.cells.map((c) => {
       const e = t.grupos[gi].estilo;
@@ -1715,8 +1639,7 @@ function drawGrade(
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     }),
   );
-  // Layout original da arte (mesma quantidade de cards): decorações exatamente como no original.
-  // Cards esticados pelo usuário: não é mais o layout original (decorações do original não voltam por cima).
+  // Layout original (mesma quantidade, sem esticar): decorações exatamente como na arte.
   const padrao = t.grupos.every((g, gi) => qtd[gi] === g.padrao) && layouts.every((l) => !l.esticado);
   restaurar(ctx, base, t, t.restaurarAntes, padrao, ocupadas);
 
@@ -1730,20 +1653,15 @@ function drawGrade(
   restaurar(ctx, base, t, t.restaurarDepois, padrao);
 }
 
-/**
- * Desenha o encarte. Devolve as fotos que ainda estavam carregando
- * (para a prévia redesenhar quando chegarem).
- */
+/** Desenha o encarte. Devolve as fotos ainda carregando (a prévia redesenha quando chegam) e os dados para a tela. */
 export async function renderPhotoTemplate(
   canvas: HTMLCanvasElement, t: PhotoTemplate, products: PhotoProductData[], opts: RenderOptions,
   waitForPhotos = false,
 ): Promise<{ pending: Promise<unknown>[]; tamanhoNome: number; ganhoCard: { w: number; h: number }; ganhoPreco: number; menorPreco: number; precoLimitado: boolean }> {
   const [original, { photos, pending }] = await Promise.all([loadBase(t.src), loadPhotos(products, waitForPhotos)]);
-  // Logo da empresa no lugar de "SEU LOGO" / nome do mercado escrito na arte.
+  // Arte com o logo, os contatos e as datas do Forte.
   const comLogo0 = await baseComLogo(t.id, original, t.width, t.height);
-  // Contatos certos do Forte no lugar dos dados de exemplo da arte.
   const comLogo = await baseComContatos(t.id, comLogo0, t.width, t.height);
-  // Datas de validade escritas na arte.
   const base = await baseComDatas(t.id, comLogo, t.width, t.height, opts.validade);
   canvas.width = t.width;
   canvas.height = t.height;
@@ -1755,7 +1673,7 @@ export async function renderPhotoTemplate(
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(base, 0, 0, t.width, t.height);
   if (t.kind === 'cartoes') {
-    // Cores do card amostradas da arte original (antes de remontar).
+    // Cores do card lidas da arte (antes de remontar).
     const c0 = t.cards[0];
     const cores = {
       topo: sampleColor(ctx, c0.x + t.sampleTop.dx, c0.y + t.sampleTop.dy),

@@ -1,14 +1,12 @@
 /// <reference lib="webworker" />
-// Remoção de fundo no próprio navegador (sem servidor), em segundo plano para não travar a tela.
-// Modelo: IS-Net "isnet-general-use" (o mesmo do rembg), em 16 bits (~91 MB, mesmo resultado do
-// original de 178 MB), dividido em 2 partes (< 50 MB cada) para caber em qualquer hospedagem.
-// O tratamento da máscara é o mesmo do antigo servico-fotos/app.py (recortar_produto):
-//   produto 100% sólido, buracos preenchidos, pontinhos soltos descartados, só o contorno suavizado.
+// Remoção de fundo no navegador, em segundo plano (não trava a tela).
+// Modelo IS-Net "isnet-general-use" (16 bits, ~91 MB, em 2 partes). Resultado: produto sólido,
+// sem buracos nem pontinhos soltos, com contorno suave (igual ao recortar_produto do app.py).
 import * as ort from 'onnxruntime-web/wasm';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
 import mjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url';
 
-// O .mjs separado é necessário para o modo com vários núcleos (cada núcleo abre um worker com ele).
+// O .mjs separado é usado no modo com vários núcleos.
 ort.env.wasm.wasmPaths = { wasm: wasmUrl, mjs: mjsUrl };
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
@@ -199,10 +197,7 @@ function suavizar(m: Uint8Array, w: number, h: number): Float32Array {
   return out;
 }
 
-/**
- * Redimensiona RGB com filtro Lanczos (igual ao Pillow/rembg). O filtro faz diferença no resultado
- * do modelo: com o bilinear do canvas, algumas fotos pequenas saem com o produto cortado.
- */
+/** Redimensiona com filtro Lanczos (como o rembg); o bilinear do canvas corta produtos em fotos pequenas. */
 function lanczosRGB(px: Uint8ClampedArray, w: number, h: number, W: number, H: number): Float32Array {
   const a = 3;
   const sinc = (x: number) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
@@ -296,7 +291,7 @@ async function recortar(id: number, arquivo: Blob) {
   try {
     const s = await carregarSessao(id);
 
-    // Entrada do modelo: 1024×1024, fundo transparente vira branco, normalizada como no rembg.
+    // Entrada do modelo: 1024×1024, fundo branco, normalizada como no rembg.
     const { ctx: bctx } = canvas(w, h);
     bctx.fillStyle = '#fff';
     bctx.fillRect(0, 0, w, h);
@@ -330,7 +325,7 @@ async function recortar(id: number, arquivo: Blob) {
     m2.drawImage(mc, 0, 0, w, h);
     const mpx = m2.getImageData(0, 0, w, h).data;
 
-    // Máscara sólida (com margem, para não "colar" o produto na borda da foto).
+    // Máscara sólida (com margem em volta da foto).
     const raio = Math.max(2, Math.floor(Math.max(w, h) * 0.03));
     const mg = raio + 2;
     const W = w + mg * 2, H = h + mg * 2;

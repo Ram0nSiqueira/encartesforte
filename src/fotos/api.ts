@@ -1,6 +1,5 @@
-// Fotos principais dos produtos, guardadas no Supabase (banco + pasta de imagens na internet).
-// Assim a foto enviada em um aparelho aparece em qualquer outro.
-// O fundo é removido no próprio navegador (recorte.ts) antes de enviar.
+// Fotos principais dos produtos no Supabase (aparecem em qualquer aparelho).
+// O fundo é tirado no navegador (recorte.ts) antes de enviar.
 import { removerFundo, type AoBaixar } from './recorte';
 
 const URL_SUPABASE = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -39,8 +38,7 @@ async function chamar(caminho: string, init: RequestInit = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Chaves: o mesmo produto é encontrado pelo código de barras e pelo nome.
-// "Arroz Tio João 5kg" e "arroz tio joao 5KG" dão a mesma chave.
+// Chaves de busca: código de barras e nome normalizado ("Arroz Tio João" = "arroz tio joao").
 // ---------------------------------------------------------------------------
 export const normalizar = (t: string) =>
   t.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-');
@@ -88,10 +86,7 @@ async function identificador(blob: Blob) {
   return [...new Uint8Array(hash)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Tira o fundo da foto (no navegador) e salva no banco como foto principal do produto.
- * Se o banco estiver fora do ar, devolve a foto recortada mesmo assim (`salva: false`).
- */
+/** Tira o fundo e salva como foto principal do produto (sem banco: devolve com `salva: false`). */
 export async function salvarFotoPrincipal(
   arquivo: Blob, nome: string, codigo: string, aoBaixar?: AoBaixar,
 ): Promise<FotoPrincipal & { salva: boolean; local?: Blob }> {

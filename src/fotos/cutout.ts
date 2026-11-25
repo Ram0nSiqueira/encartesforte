@@ -1,8 +1,6 @@
 /**
- * Prepara a foto de um produto para o encarte:
- * - opcionalmente remove o fundo branco ligado às bordas (fotos de embalagem em fundo branco);
- * - detecta se a imagem é um "recorte" (fundo transparente) ou uma foto comum;
- * - recorta as sobras transparentes para o produto ocupar o espaço disponível.
+ * Prepara a foto do produto: tira (opcional) o fundo branco das bordas, detecta se é um recorte
+ * (fundo transparente) e corta as sobras transparentes.
  */
 
 export interface PreparedPhoto {
@@ -117,8 +115,7 @@ async function prepare(src: string, removeBg: boolean): Promise<PreparedPhoto> {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(img, 0, 0, w, h);
 
-  // Fotos já recortadas (ex.: do catálogo) não passam pela remoção simples de fundo branco,
-  // que poderia "comer" partes brancas da embalagem.
+  // Fotos já recortadas não passam pela remoção de fundo branco (comeria partes da embalagem).
   if (removeBg && !cornersTransparent(ctx, w, h)) removeWhiteBackground(ctx, w, h);
   const cutout = cornersTransparent(ctx, w, h) || transparentShare(ctx, w, h) > 0.12;
   return { canvas: cutout ? trimTransparent(canvas) : canvas, cutout };

@@ -6,7 +6,7 @@ export interface Rect { x: number; y: number; w: number; h: number }
 export interface EraseRect extends Rect {
   /** Não usa a borda direita como referência (ex.: texto encostado na borda do papel). */
   noRight?: boolean;
-  /** Borda de cima com detalhes (ex.: um título encostado): usa só a cor geral dela, bem suavizada. */
+  /** Borda de cima com detalhes: usa só a cor geral dela. */
   noTop?: boolean;
 }
 
@@ -19,7 +19,7 @@ export interface TextSlot {
   minSize?: number;
   align: 'left' | 'center' | 'right';
   valign: 'top' | 'center' | 'bottom';
-  /** Texto usado para medir a altura (mantém a linha de base estável entre nomes diferentes). */
+  /** Texto para medir a altura (linha de base estável). */
   heightRef?: string;
   uppercase?: boolean;
   letterSpacing?: number;

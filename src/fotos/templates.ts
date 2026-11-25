@@ -31,30 +31,24 @@ export type PhotoTemplate =
       radius: number;
       /** Altura da parte amarela no topo do cartão. */
       topHeight: number;
-      /** Pontos para amostrar as cores originais do cartão. */
+      /** Onde ler as cores originais do cartão. */
       sampleTop: { dx: number; dy: number };
       sampleBody: { dx: number; dy: number };
       priceColor: string;
       hasValidity: true;
-      /**
-       * Permite adicionar/remover cards: a arte é remontada com o topo (encolhendo se precisar),
-       * os cards (todos do mesmo tamanho) e o rodapé (inteiro).
-       */
+      /** Permite adicionar/remover cards: a arte é remontada (topo + cards + rodapé). */
       flex?: {
-        /** Faixa da imagem original com o título/banner (pode encolher). */
+        /** Faixa do título/banner (pode encolher). */
         topo: { y0: number; y1: number };
-        /**
-         * Painel de fundo do topo (na imagem original). Quando o topo encolhe, o painel é
-         * redesenhado na largura toda e o conteúdo do topo fica centralizado sobre ele.
-         */
+        /** Painel de fundo do topo (redesenhado na largura toda quando o topo encolhe). */
         painel: Rect & { raio: number; amostra: { x: number; y: number } };
-        /** Faixa da imagem original com logo/contatos (fica inteira). */
+        /** Faixa do logo/contatos (fica inteira). */
         rodape: { y0: number; y1: number };
         /** Faixa horizontal onde os cards podem ficar. */
         area: { x: number; w: number };
         /** Espaço entre cards. */
         gap: number;
-        /** Menor escala aceitável para o topo (0.45 = 45% do tamanho original). */
+        /** Menor escala do topo (0.6 = 60%). */
         escalaMinTopo: number;
         maxCards: number;
       };
@@ -66,9 +60,9 @@ export type PhotoTemplate =
       src: string;
       width: number;
       height: number;
-      /** Áreas com as fotos/selos originais, reconstruídas a partir das bordas. */
+      /** Áreas das fotos/selos originais (apagadas e refeitas pelas bordas). */
       erase: EraseRect[];
-      /** Na ordem de desenho (o último fica na frente). Cada item usa o produto `index`. */
+      /** Em ordem de desenho (o último fica na frente); `index` = produto. */
       items: { index: number; image: Rect; badge: Circle }[];
       priceColor: string;
       hasValidity: false;
@@ -76,9 +70,8 @@ export type PhotoTemplate =
   | TemplateGrade;
 
 // ---------------------------------------------------------------------------
-// Modelo genérico "grade de produtos": limpa a área dos produtos da imagem original
-// e desenha cada produto (foto, nome, etiqueta de preço) no estilo do modelo,
-// com o layout inteligente (permite adicionar/remover cards).
+// Modelo "grade de produtos": limpa a área dos produtos da arte e redesenha cada card
+// (foto, nome, preço) no estilo do modelo, com layout automático.
 // ---------------------------------------------------------------------------
 
 /** Retângulo em frações da célula (0 a 1). */
@@ -92,36 +85,36 @@ export interface EstiloNome {
   /** Texto antes do nome (ex.: "• "). */
   prefixo?: string;
   maxLinhas: number;
-  /** Tamanhos da fonte na célula de tamanho original (px). */
+  /** Tamanhos da fonte no card original (px). */
   tamanhoMax: number;
   tamanhoMin: number;
   sombra?: string;
   /** Alinhamento do texto (padrão: centro). */
   alinhar?: 'centro' | 'esquerda';
-  /** Plaquinha de madeira desenhada atrás do nome (com cordinhas nas pontas). */
+  /** Plaquinha de madeira atrás do nome. */
   placa?: { cor: string; escura: string; clara: string; corda: string };
 }
 
 export interface EstiloPreco {
   forma: 'retangulo' | 'pilula' | 'elipse';
   fundo: string;
-  /** Raio dos cantos (retângulo), em fração da altura da etiqueta. */
+  /** Raio dos cantos (fração da altura). */
   raio?: number;
   borda?: string;
   sombra?: boolean;
   italico?: boolean;
   /** Texto pequeno em cima (ex.: "Por apenas:"). */
   rotulo?: { texto: string; cor: string };
-  /** Círculo na ponta esquerda da etiqueta, com o "R$" dentro (cor do círculo). */
+  /** Cor do círculo com o "R$" na ponta esquerda. */
   circuloMoeda?: string;
-  /** Raio do círculo do "R$" em fração da altura (padrão 0.5 = altura toda, dentro da etiqueta). */
+  /** Raio do círculo do "R$" (fração da altura; padrão 0.5). */
   circuloRaio?: number;
-  /** Não mostrar "R$" (só o valor), como em alguns modelos. */
+  /** Sem "R$" (só o valor). */
   semMoeda?: boolean;
-  /** "R$" ao lado do número: tamanho e altura em fração do número (padrão 0.5 e 0.28). */
+  /** "R$" ao lado do número: tamanho e subida (fração do número; padrão 0.5 e 0.28). */
   moedaTamanho?: number;
   moedaSubir?: number;
-  /** Bloco colorido na ponta esquerda da etiqueta com o "R$" (largura em fração da etiqueta). */
+  /** Bloco colorido com o "R$" na ponta esquerda (largura em fração). */
   blocoMoeda?: { cor: string; largura: number };
   /** Faixa colorida por baixo da etiqueta (efeito 3D). */
   baseSombra?: string;
@@ -131,97 +124,80 @@ export interface EstiloPreco {
   corInteiro: string;
   corCentavos: string;
   corUnidade: string;
-  /** Onde fica a unidade: linha de baixo ou empilhada sob os centavos. */
+  /** Onde fica a unidade. */
   unidade: 'abaixo' | 'sob-centavos' | 'nenhuma';
-  /** Formato da unidade: {u} = unidade digitada (ex.: "o {U}*" -> "o KG*"). */
+  /** Formato da unidade ({u} = digitada, {U} = maiúscula; ex.: "o {U}*"). */
   formatoUnidade?: string;
-  /** Tamanho da unidade "abaixo", em fração da altura da etiqueta (padrão 0.12). */
+  /** Tamanho da unidade "abaixo" (fração da altura; padrão 0.12). */
   tamanhoUnidade?: number;
-  /** Centavos na linha de base (padrão: elevados, alinhados ao topo do número). */
+  /** Centavos na linha de base (padrão: elevados). */
   centavosNaBase?: boolean;
-  /** Tamanho dos centavos em relação ao número (padrão 0.5; 1 = mesmo tamanho). */
+  /** Tamanho dos centavos sobre o número (padrão 0.5). */
   centavosTamanho?: number;
-  /** Proporções (em fração da altura da etiqueta). */
+  /** Tamanho do número e linha de base (fração da altura). */
   tamanhoInteiro: number;
   linhaBase: number;
 }
 
 export interface EstiloCelula {
-  /** Tamanho da célula no layout original (px). */
+  /** Tamanho do card no layout original (px). */
   base: { w: number; h: number };
-  /** Caixa desenhada atrás do produto (opcional). A "Cor do card" muda o preenchimento. */
+  /** Caixa atrás do produto (a "Cor do card" muda o fundo). */
   caixa?: {
     fundo: string; borda?: string; larguraBorda?: number; raio: number; rect: RelRect;
     /** Sombra suave embaixo do card. */
     sombra?: boolean;
-    /** Três pontinhos no canto superior esquerdo (como um "menu"). */
+    /** Três pontinhos no canto (como um "menu"). */
     pontos?: string;
   };
   foto: RelRect;
-  /**
-   * Fundo atrás da foto (ex.: quadro branco dentro de um card colorido). `radial`: brilho do
-   * centro para a borda (substitui `cor`); `cantos: 'topo'`: só os cantos de cima arredondados.
-   */
+  /** Fundo atrás da foto. `radial`: brilho no centro; `cantos: 'topo'`: só cantos de cima arredondados. */
   fundoFoto?: { cor: string; raio: number; rect: RelRect; radial?: [string, string]; cantos?: 'topo' };
-  /** Selo de texto no card (ex.: "BLACK"), em formato de pílula. */
+  /** Selo de texto em pílula (ex.: "BLACK"). */
   selo?: { texto: string; fundo: string; cor: string; rect: RelRect };
   nome: RelRect & { estilo: EstiloNome };
   preco: RelRect & { estilo: EstiloPreco };
 }
 
 export type Limpeza =
-  /** `textura`: trecho limpo (tamanho múltiplo do padrão) cuja textura fina é devolvida à área. */
+  /** Apaga pelas bordas; `textura`: trecho limpo cuja textura fina volta à área. */
   | { tipo: 'coons'; rect: EraseRect; textura?: Rect }
   | { tipo: 'cor'; rect: Rect; raio: number; cor: string }
-  /**
-   * Fundo com duas regiões separadas por uma curva (pontos x,y medidos na arte, ligados de forma
-   * suave): acima, a textura de um trecho limpo da imagem (repetida espelhada); abaixo, uma cor
-   * lisa. As bordas da área se misturam suavemente com a imagem original (`suavizar` px).
-   */
+  /** Fundo dividido por uma curva: textura da arte acima, cor lisa abaixo, bordas misturadas (`suavizar` px). */
   | { tipo: 'curva'; rect: Rect; curva: [number, number][]; acima: Rect; abaixo: string; suavizar: number }
-  /**
-   * Fundo em degradê refeito a partir de colunas de referência: cada coluna é amostrada
-   * inteira (sem `pontos`) ou só nas alturas livres indicadas em `pontos`; entre as colunas,
-   * a cor é interpolada suavemente.
-   */
+  /** Degradê refeito a partir de colunas da arte (inteiras ou só nos `pontos`), interpolando entre elas. */
   | {
       tipo: 'colunas';
       rect: Rect;
       colunas: { x: number; pontos?: number[] }[];
-      /** Altura (px) da transição suave com a linha da imagem logo acima da área. */
+      /** Altura (px) da transição com a linha acima da área. */
       mesclarTopo?: number;
-      /**
-       * Textura do fundo (ex.: madeira): um trecho limpo da imagem cujas variações são
-       * somadas ao degradê, repetido em toda a área.
-       */
+      /** Textura (ex.: madeira) de um trecho limpo, somada ao degradê. */
       detalhe?: { rect: Rect; intensidade: number };
     };
 
 export type Forma =
   | { tipo: 'rect'; rect: Rect }
   | { tipo: 'poligono'; pontos: [number, number][] }
-  /** `exceto`: partes do círculo que NÃO voltam (ex.: onde ficava um card da arte original). */
+  /** `exceto`: partes do círculo que não voltam. */
   | { tipo: 'circulo'; cx: number; cy: number; r: number; exceto?: (Rect & { raio?: number })[]; esfumar?: number };
 
-/**
- * Parte da arte original que volta por cima da limpeza. `quando`: só no layout original
- * ('padrao', mesma quantidade de cards da arte) ou só nos outros ('outros').
- */
+/** Parte da arte que volta depois da limpeza. `quando`: só no layout original ('padrao') ou só nos outros. */
 export type FormaRestaurar = Forma & { manterSobCards?: boolean; quando?: 'padrao' | 'outros' };
 
 export interface GrupoGrade {
-  /** Título mostrado no formulário (ex.: "Super oferta"); vazio = "Produto N". */
+  /** Título no formulário (ex.: "Super oferta"); vazio = "Produto N". */
   titulo?: string;
   /** Área onde os cards podem ficar. */
   area: Rect;
   gapX: number;
   gapY: number;
-  /** Quantidade de produtos do layout original. */
+  /** Quantidade de cards da arte original. */
   padrao: number;
   /** Máximo de cards (igual a `padrao` = quantidade fixa). */
   max: number;
   estilo: EstiloCelula;
-  /** Quanto o card pode crescer com poucos produtos (padrão: ESCALA_MAX_CARD). */
+  /** Quanto o card cresce com poucos produtos (padrão: ESCALA_MAX_CARD). */
   escalaMax?: number;
 }
 
@@ -232,21 +208,13 @@ export interface TemplateGrade {
   src: string;
   width: number;
   height: number;
-  /** Como limpar a área dos produtos da imagem original. */
+  /** Como limpar a área dos produtos da arte. */
   limpar: Limpeza[];
-  /**
-   * Partes da imagem original que voltam por cima da limpeza, atrás dos cards (decorações).
-   * Por padrão, uma decoração que ficaria embaixo de um card é omitida; com `manterSobCards`
-   * ela sempre volta (o card fica por cima, como no original).
-   */
+  /** Decorações da arte que voltam atrás dos cards (omitidas se ficarem sob um card, salvo `manterSobCards`). */
   restaurarAntes?: FormaRestaurar[];
-  /** Partes da imagem original que voltam por cima de tudo (ex.: título que sobrepõe os produtos). */
+  /** Partes da arte que voltam por cima de tudo (ex.: título sobre os produtos). */
   restaurarDepois?: FormaRestaurar[];
-  /**
-   * Formas redesenhadas depois da limpeza (ex.: a ponta de um selo que ficava escondida atrás
-   * dos produtos). `pontos` é a linha central da borda; o interior é preenchido com uma cor ou
-   * com um pedaço da própria imagem (textura), e as bordas com `contornos` (o mais largo primeiro).
-   */
+  /** Formas redesenhadas após a limpeza (ex.: ponta de um selo): linha central, preenchimento e contornos. */
   desenhos?: {
     pontos: [number, number][];
     preenchimento: { cor: string } | { textura: Rect };
@@ -307,17 +275,16 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: sabadoDaCarne,
     width: 1080,
     height: 1350,
-    // Painel branco dos produtos: repintado (sem o selo "Chegue cedo", que ficava no meio dos produtos).
+    // Painel branco repintado (sem o selo "Chegue cedo").
     limpar: [
       { tipo: 'cor', rect: { x: 63, y: 466, w: 956, h: 746 }, raio: 28, cor: 'rgb(252,251,249)' },
-      // Parte do selo "AQUI É MAIS BARATO" que fica fora do painel (sobre o fundo).
+      // Parte do selo "AQUI É MAIS BARATO" fora do painel.
       { tipo: 'coons', rect: { x: 16, y: 852, w: 47, h: 168, noRight: true } },
-      // Frases retiradas: "NÃO ACEITAREMOS ENCOMENDAS!!!" e "ACEITAMOS CARTÕES (exceto Credishop)".
-      // A textura de pontinhos do fundo (padrão de 29 px) volta a partir de um trecho limpo.
+      // Frases retiradas ("NÃO ACEITAREMOS ENCOMENDAS", "ACEITAMOS CARTÕES"), com a textura de pontinhos.
       { tipo: 'coons', rect: { x: 86, y: 344, w: 266, h: 96 }, textura: { x: 232, y: 250, w: 58, h: 58 } },
       { tipo: 'coons', rect: { x: 752, y: 170, w: 228, h: 62 }, textura: { x: 232, y: 250, w: 58, h: 58 } },
     ],
-    // Selo "AQUI É MAIS BARATO" volta por cima do painel (atrás dos cards).
+    // Selo "AQUI É MAIS BARATO" volta (atrás dos cards).
     restaurarAntes: [
       {
         tipo: 'poligono',
@@ -360,8 +327,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: ofertaEspecialForte,
     width: 736,
     height: 1308,
-    // Área dos produtos: fundo vermelho em degradê refeito pelas bordas da imagem e pelo centro
-    // (amostrado só nas faixas livres entre as linhas de produtos).
+    // Fundo vermelho refeito pelas bordas e pelo centro (nas faixas livres).
     limpar: [
       {
         tipo: 'colunas',
@@ -374,8 +340,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         mesclarTopo: 90,
       },
     ],
-    // A ponta de baixo do hexágono do título ficava atrás das carnes: é redesenhada
-    // (só abaixo do texto "DO FORTE"; o restante do hexágono é o original).
+    // Ponta de baixo do hexágono do título (ficava atrás das carnes), redesenhada.
     desenhos: [
       {
         pontos: [
@@ -425,7 +390,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: sabadaoChurrasco,
     width: 1080,
     height: 1350,
-    // Fundo de madeira: degradê pelas bordas + textura de um trecho limpo da própria madeira.
+    // Fundo de madeira: degradê + textura da própria madeira.
     limpar: [
       {
         tipo: 'colunas',
@@ -438,7 +403,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         detalhe: { rect: { x: 5, y: 20, w: 190, h: 230 }, intensidade: 1 },
       },
     ],
-    // Carnes decorativas dos cantos voltam (os cards podem ficar por cima, como no original).
+    // Carnes dos cantos voltam (os cards podem ficar por cima).
     restaurarAntes: [
       { tipo: 'poligono', pontos: [[0, 1078], [100, 1078], [100, 1140], [290, 1140], [290, 1190], [0, 1190]], manterSobCards: true },
       { tipo: 'rect', rect: { x: 995, y: 566, w: 85, h: 66 }, manterSobCards: true },
@@ -478,7 +443,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: semanaDoCliente,
     width: 864,
     height: 1080,
-    // Fundo amarelo refeito (bordas + centro nas faixas livres entre as linhas de produtos).
+    // Fundo amarelo refeito (bordas + centro).
     limpar: [
       {
         tipo: 'colunas',
@@ -491,7 +456,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         mesclarTopo: 130,
       },
     ],
-    // Parte visível da moeda "$" da esquerda (fora dos produtos) volta inteira.
+    // Moeda "$" da esquerda volta.
     restaurarAntes: [
       {
         tipo: 'poligono',
@@ -510,7 +475,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         gapY: 5,
         padrao: 15,
         max: 20,
-        // Cards pequenos no original: podem crescer mais quando há poucos produtos.
+        // Cards pequenos: podem crescer mais.
         escalaMax: 3.2,
         estilo: {
           base: { w: 150, h: 185 },
@@ -543,7 +508,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     limpar: [
       // Painel branco dos 4 produtos (os cards são redesenhados).
       { tipo: 'cor', rect: { x: 35, y: 510, w: 568, h: 792 }, raio: 0, cor: '#ffffff' },
-      // Coluna amarela "SUPER OFERTA": amarelo refeito + textura listrada do próprio modelo.
+      // Coluna "SUPER OFERTA": amarelo refeito + textura listrada.
       {
         tipo: 'colunas',
         rect: { x: 612, y: 492, w: 408, h: 862 },
@@ -616,7 +581,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: fimDeSemanaImbativel,
     width: 1800,
     height: 2400,
-    // Área dos produtos refeita (laranja do topo passando para o branco), pelas bordas.
+    // Área dos produtos refeita (laranja → branco).
     limpar: [
       {
         tipo: 'colunas',
@@ -695,7 +660,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: ofertasDeBebidas,
     width: 1200,
     height: 2133,
-    // Interior do painel branco (a moldura vermelha, o título e o rodapé ficam).
+    // Interior do painel branco (moldura, título e rodapé ficam).
     limpar: [{ tipo: 'cor', rect: { x: 57, y: 378, w: 1077, h: 1657 }, raio: 0, cor: '#ffffff' }],
     grupos: [
       {
@@ -707,7 +672,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         escalaMax: 1.6,
         estilo: {
           base: { w: 538.5, h: 276 },
-          // Cada produto num quadro com linha vermelha fina (forma a grade do modelo).
+          // Quadro com linha vermelha fina (forma a grade).
           caixa: { fundo: '#ffffff', borda: 'rgb(175,26,30)', larguraBorda: 2, raio: 0, rect: { x: 0, y: 0, w: 1, h: 1 } },
           foto: { x: 0.04, y: 0.07, w: 0.43, h: 0.86 },
           nome: {
@@ -735,7 +700,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: blackFruti,
     width: 1080,
     height: 1080,
-    // Fundo atrás dos cards refeito: estampa clara de frutas acima da curva e verde liso abaixo.
+    // Fundo refeito: estampa de frutas acima da curva, verde liso abaixo.
     limpar: [
       {
         tipo: 'curva',
@@ -746,13 +711,12 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         suavizar: 22,
       },
     ],
-    // Maçãs desfocadas das laterais. Com 2 produtos (layout original) ficam na frente dos cards,
-    // como na arte; com outra quantidade, ficam atrás (só a parte que estava fora dos cards).
+    // Maçãs das laterais: na frente dos cards só no layout original (2 produtos); senão, atrás.
     restaurarAntes: [
       { tipo: 'circulo', cx: 186, cy: 816, r: 82, exceto: [{ x: 195, y: 316, w: 340, h: 503, raio: 24 }], esfumar: 14, manterSobCards: true },
       { tipo: 'circulo', cx: 966, cy: 670, r: 142, exceto: [{ x: 548, y: 316, w: 340, h: 503, raio: 24 }], esfumar: 14, manterSobCards: true },
     ],
-    // Parte de baixo do título "BLACK FRUTI", que fica por cima dos cards.
+    // Parte de baixo do título "BLACK FRUTI" (por cima dos cards).
     restaurarDepois: [
       {
         tipo: 'poligono',
@@ -804,8 +768,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: blackFridayHortifruti,
     width: 2160,
     height: 2700,
-    // Fundo escuro listrado refeito pelas bordas, com as listras diagonais devolvidas
-    // (trecho limpo de 79 px = 2 listras, repetido alinhado).
+    // Fundo escuro refeito pelas bordas, com as listras diagonais devolvidas.
     limpar: [
       { tipo: 'coons', rect: { x: 40, y: 640, w: 2080, h: 1656 }, textura: { x: 1000, y: 2300, w: 79, h: 79 } },
     ],
@@ -820,7 +783,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
         estilo: {
           base: { w: 482, h: 520 },
           caixa: { fundo: 'rgb(15,26,10)', borda: 'rgb(44,74,20)', larguraBorda: 2, raio: 40, rect: { x: 0, y: 0, w: 1, h: 1 } },
-          // Parte de cima do card (onde fica a foto), com brilho no centro.
+          // Parte de cima do card (foto), com brilho no centro.
           fundoFoto: { cor: 'rgb(17,30,10)', radial: ['rgb(31,54,17)', 'rgb(9,15,5)'], raio: 40, cantos: 'topo', rect: { x: 0.003, y: 0.003, w: 0.994, h: 0.582 } },
           selo: { texto: 'BLACK', fundo: 'rgb(125,220,31)', cor: '#0a0a0a', rect: { x: 0.041, y: 0.042, w: 0.272, h: 0.092 } },
           foto: { x: 0.06, y: 0.07, w: 0.88, h: 0.5 },
@@ -850,7 +813,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: semanaDoHortifruti,
     width: 810,
     height: 1080,
-    // Coluna verde da esquerda e fundo da direita refeitos pelas bordas (degradês).
+    // Coluna verde e fundo da direita refeitos (degradês).
     limpar: [
       { tipo: 'coons', rect: { x: 28, y: 163, w: 330, h: 845 } },
       { tipo: 'colunas', rect: { x: 372, y: 440, w: 436, h: 568 }, colunas: [{ x: 373, pontos: [450, 500, 545, 660, 720, 780, 840, 900, 1000] }, { x: 806, pontos: [450, 500, 560, 620, 680, 740, 800, 860, 920, 1000] }], mesclarTopo: 90 },
@@ -914,10 +877,10 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
     src: ofertasHortifruti,
     width: 736,
     height: 1307,
-    // Painel branco dos produtos repintado (a frase das datas, embaixo, fica).
+    // Painel branco repintado (a frase das datas fica).
     limpar: [
       { tipo: 'cor', rect: { x: 44, y: 392, w: 648, h: 704 }, raio: 0, cor: '#ffffff' },
-      // Ponta das etiquetas da direita, que encostam na borda do painel.
+      // Ponta das etiquetas que encostam na borda do painel.
       { tipo: 'cor', rect: { x: 688, y: 568, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
       { tipo: 'cor', rect: { x: 688, y: 800, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
       { tipo: 'cor', rect: { x: 688, y: 1031, w: 9, h: 62 }, raio: 0, cor: '#ffffff' },
@@ -953,8 +916,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
   },
 ];
 
-// "Black Friday Hortifrúti" (coluna verde): mesma arte do Semana do Hortifrúti, com o título
-// "BLACK FRIDAY" e os dados do Forte; mesmo layout e funcionalidades.
+// "Black Friday Hortifrúti" (coluna): mesma arte e layout do Semana do Hortifrúti, outro título.
 {
   const semana = PHOTO_TEMPLATES.find((t) => t.id === 'semana-do-hortifruti')!;
   PHOTO_TEMPLATES.push({
@@ -965,8 +927,7 @@ export const PHOTO_TEMPLATES: PhotoTemplate[] = [
   } as PhotoTemplate);
 }
 
-// "Ofertão do Açougue" e "Ofertão do Churrasco": mesma arte do Sabadão do Churrasco com outro
-// título (fundo, carnes dos cantos, faixa das datas e rodapé iguais); mesmo layout.
+// "Ofertão do Açougue" e "Ofertão do Churrasco": mesma arte e layout do Sabadão, outro título.
 {
   const sabadao = PHOTO_TEMPLATES.find((t) => t.id === 'sabadao-do-churrasco')!;
   PHOTO_TEMPLATES.push(
@@ -987,7 +948,7 @@ export function titulosProdutos(t: PhotoTemplate, total: number, distribuir: (t:
   return out;
 }
 
-/** Quantidade padrão de produtos do modelo (nos modelos flexíveis, o usuário pode mudar). */
+/** Quantidade padrão de cards do modelo. */
 export const slotCount = (t: PhotoTemplate) =>
   t.kind === 'cartoes' ? t.cards.length : t.kind === 'selos' ? t.items.length : t.grupos.reduce((s, g) => s + g.padrao, 0);
 export const maxSlots = (t: PhotoTemplate) =>

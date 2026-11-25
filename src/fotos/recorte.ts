@@ -5,7 +5,7 @@ export interface Recorte {
   semFundo: Blob;
   original: Blob;
   branco: Blob;
-  /** false quando não deu para separar o produto (as três imagens são a foto original). */
+  /** false = não deu para separar o produto (as três são a original). */
   recortou: boolean;
   aviso?: string;
   ms: number;
@@ -54,7 +54,7 @@ export async function prepararRecorte(progresso?: AoBaixar) {
   await pedir({ tipo: 'preparar' }, progresso);
 }
 
-/** Tira o fundo da foto. Também devolve a original e a versão com fundo branco (todas em PNG). */
+/** Tira o fundo; devolve sem fundo, original e fundo branco (PNG). */
 export async function removerFundo(imagem: Blob, progresso?: AoBaixar): Promise<Recorte> {
   const r = await pedir({ tipo: 'recortar', imagem }, progresso);
   if (r.tipo !== 'resultado') throw new Error('Resposta inesperada do recorte.');

@@ -1,11 +1,9 @@
 """
 Serviço de fotos do EncartesForte (Flask).
 
-- Busca produtos no Open Food Facts (e nas bases irmãs) e remove o fundo da foto com o rembg.
-  Segue as instruções em Documents/prompt/instrucoes-integracao-open-food-facts.txt.
-- Fotos enviadas pelo usuário (com ou sem remoção de fundo) viram a FOTO PRINCIPAL do produto:
-  nas próximas buscas pelo mesmo nome ou código de barras, ela vem primeiro.
-- Tudo fica no banco SQLite dados/encartesforte.db; as imagens em dados/imagens-produtos/.
+- Busca produtos no Open Food Facts e tira o fundo da foto (rembg).
+- Foto enviada pelo usuário vira a FOTO PRINCIPAL do produto (vem primeiro nas buscas).
+- Dados no SQLite dados/encartesforte.db; imagens em dados/imagens-produtos/.
 
 Rodar:  .venv\\Scripts\\python app.py   (ou "npm start" na raiz do projeto)
 """
@@ -61,8 +59,7 @@ LIMITE_CODIGO = 100
 
 TAMANHO_MAX = 1000
 
-# Modelo "isnet-general-use" (~170 MB, licença aberta, permite uso comercial).
-# O padrão do rembg 2.0.8x ("bria-rmbg", ~1 GB) é de uso NÃO comercial e bem mais lento em CPU.
+# Modelo "isnet-general-use" (~170 MB, uso comercial permitido; o padrão do rembg não permite).
 MODELO_REMBG = os.environ.get("MODELO_REMBG", "isnet-general-use")
 
 
@@ -357,12 +354,8 @@ class RecorteFalhou(Exception):
 
 def recortar_produto(original):
     """
-    Usa o rembg só para descobrir ONDE está o produto (máscara) e devolve o produto 100% sólido:
-      - partes claras/translúcidas da embalagem que o modelo deixou "meio transparentes" ficam opacas;
-      - buracos dentro do produto são preenchidos;
-      - pontinhos soltos do fundo são descartados;
-      - só o contorno é suavizado (anti-serrilhado).
-    As cores vêm da foto original (o recorte comum do rembg escurece as áreas semitransparentes).
+    Recorta o produto: o rembg acha ONDE ele está (máscara) e o produto sai 100% sólido
+    (sem partes translúcidas, buracos ou pontinhos soltos), com contorno suave e cores originais.
     """
     # Fundo transparente da foto original vira branco antes de ir para o modelo.
     rgb = Image.new("RGB", original.size, (255, 255, 255))
@@ -374,8 +367,7 @@ def recortar_produto(original):
     a = np.asarray(mascara, dtype=np.float32) / 255.0
     solido = a > 0.1  # inclui as partes que o modelo marcou só "um pouco" como produto
 
-    # Fecha falhas na borda do produto (ex.: parte transparente de um pacote plástico),
-    # com um disco de ~3% do tamanho da foto, e depois preenche os buracos internos.
+    # Fecha falhas na borda (ex.: pacote transparente) e preenche os buracos internos.
     raio = max(2, int(max(solido.shape) * 0.03))
     y, x = np.ogrid[-raio:raio + 1, -raio:raio + 1]
     disco = x * x + y * y <= raio * raio
@@ -406,11 +398,8 @@ def recortar_produto(original):
 
 def processar_e_salvar(conteudo, nome_arquivo):
     """
-    Salva duas versões em PNG:
-      <nome>.png           -> sem fundo (rembg); se o rembg falhar, a original
-      <nome>-original.png  -> a foto como veio
-    A versão com fundo branco é gerada sob demanda (ver gerar_fundo_branco).
-    Devolve (sem_fundo, aviso).
+    Salva <nome>.png (sem fundo; se falhar, a original) e <nome>-original.png.
+    A de fundo branco é gerada sob demanda. Devolve (sem_fundo, aviso).
     """
     original = abrir_imagem(conteudo)  # valida antes de gastar tempo com o rembg
     ajustar(original.copy()).save(caminho(variante(nome_arquivo, "original")), "PNG", optimize=True)
@@ -518,9 +507,8 @@ def buscar_produto():
 @app.post("/api/foto-principal")
 def enviar_foto_principal():
     """
-    Upload do usuário. Campos: imagem (arquivo), nome, codigo (opcional).
-    Guarda a versão sem fundo e a original; o fundo exibido é escolhido em /imagens-produtos/?fundo=.
-    A foto vira a principal do produto: nas próximas buscas pelo nome/código, ela vem primeiro.
+    Upload do usuário (campos: imagem, nome, codigo opcional). Salva sem fundo e original;
+    a foto vira a principal do produto nas próximas buscas.
     """
     arquivo = request.files.get("imagem")
     if not arquivo:
@@ -613,7 +601,7 @@ def reprocessar_imagens_antigas():
                 processar_e_salvar(f.read(), arquivo)
             refeitos += 1
         elif arquivo in off and arquivo not in usuario:
-            # Sem a foto original guardada: sai do cache e será baixada de novo na próxima busca.
+            # Sem a original: sai do cache (é baixada de novo na próxima busca).
             with _trava_banco, conectar() as con:
                 con.execute("DELETE FROM cache_off WHERE arquivo_png = ?", (arquivo,))
             for sufixo in ("", "-branco"):
