@@ -8,7 +8,7 @@ import './fotos.css';
 import { fileToDataUrl, IMAGE_ACCEPT } from '../editor/image';
 import { parseBRNumber } from '../editor/parser';
 import { bancoConfigurado, buscarFotoPrincipal, esquecerFotoPrincipal, PREFIXO_IMAGENS, salvarFotoPrincipal } from './api';
-import { aceitaAjusteCard, distribuirGrupos, ensureFonts, renderPhotoTemplate, type AjusteCard, type ModoCard, type TamanhoNome } from './render';
+import { aceitaAjusteCard, distribuirGrupos, ensureFonts, renderPhotoTemplate, type AjusteCard, type ModoCard, type TamanhoNome, type TamanhoPreco } from './render';
 import { temDatas } from './datas';
 // Fontes usadas nas datas escritas nas artes.
 import '@fontsource/anton/latin-400.css';
@@ -112,6 +112,8 @@ interface State {
   namePx: Record<string, number>;
   /** Tamanho dos cards escolhido em cada modelo (cada arte tem um espaço livre diferente). */
   cardSize: Record<string, AjusteCard>;
+  /** Tamanho do preço escolhido em cada modelo (automático ou manual). */
+  priceSize: Record<string, TamanhoPreco>;
   products: ProductState[];
 }
 
@@ -147,6 +149,7 @@ function defaultState(): State {
     nameSize: 'm',
     namePx: {},
     cardSize: {},
+    priceSize: {},
     products: Array.from({ length: MAX_PRODUCTS }, (_, i) => novoProduto(...(names[i] ?? []))),
   };
 }
@@ -166,6 +169,7 @@ function loadState(): State {
       nameSize: saved.nameSize ?? d.nameSize,
       namePx: saved.namePx ?? d.namePx,
       cardSize: saved.cardSize ?? d.cardSize,
+      priceSize: saved.priceSize ?? d.priceSize,
       // Versão anterior guardava uma quantidade só (do modelo "De Olho nas Ofertas").
       cardCounts:
         saved.cardCounts ??
@@ -261,15 +265,17 @@ async function render(waitForPhotos = false) {
     cardColor: state.squareMode === 'todos' ? state.squareColor : p.cardColor,
   }));
   const tmp = document.createElement('canvas');
-  const { pending, tamanhoNome, ganhoCard, ganhoPreco } = await renderPhotoTemplate(tmp, t, data, {
+  const { pending, tamanhoNome, ganhoCard, ganhoPreco, menorPreco, precoLimitado } = await renderPhotoTemplate(tmp, t, data, {
       validity: state.validity,
       validade: { inicio: state.validityStart, fim: state.validity, estoque: state.untilStock },
       nome: tamanhoNomeAtual(t),
       card: ajusteCardAtual(t),
+      preco: tamanhoPrecoAtual(t),
     }, waitForPhotos);
   if (ticket !== renderTicket) return;
   mostrarTamanhoNome(t, tamanhoNome);
   mostrarAjusteCard(t, ganhoCard, ganhoPreco);
+  mostrarTamanhoPreco(t, ganhoPreco, menorPreco, precoLimitado);
   canvas.width = tmp.width;
   canvas.height = tmp.height;
   canvas.getContext('2d')!.drawImage(tmp, 0, 0);
@@ -301,6 +307,7 @@ for (const t of PHOTO_TEMPLATES) {
     syncTemplateUI();
     syncTamanhoNomeUI();
     syncAjusteCardUI();
+    syncTamanhoPrecoUI();
     scheduleRender();
   });
   modelList.appendChild(label);
@@ -400,7 +407,8 @@ function syncAjusteCardUI() {
   tamCardQuantoBox.hidden = a.modo === 'padrao';
   tamCardQuanto.value = String(Math.round(a.quanto * 100));
   tamCardQuantoTxt.textContent = `Usar ${Math.round(a.quanto * 100)}% do espaço livre`;
-  tamCardPrecoBox.hidden = a.modo === 'padrao';
+  // No preço manual, o tamanho do preço é controlado no bloco "Tamanho do preço".
+  tamCardPrecoBox.hidden = a.modo === 'padrao' || tamanhoPrecoAtual(t).modo === 'manual';
   tamCardPreco.checked = a.preco !== false;
 }
 
@@ -416,8 +424,8 @@ function mostrarAjusteCard(t: PhotoTemplate, ganho: { w: number; h: number }, ga
   if (a.modo !== 'altura' && pct(ganho.w) > 0) partes.push(`${pct(ganho.w)}% mais largos`);
   if (a.modo !== 'largura' && pct(ganho.h) > 0) partes.push(`${pct(ganho.h)}% mais altos`);
   const dir = a.modo === 'largura' ? 'ao lado' : a.modo === 'altura' ? 'acima/abaixo' : 'em volta';
-  const preco = pct(ganhoPreco) > 0
-    ? ` Preço ${pct(ganhoPreco)}% maior.`
+  const preco = tamanhoPrecoAtual(t).modo === 'manual' ? ' Preço no tamanho manual.'
+    : pct(ganhoPreco) > 0 ? ` Preço ${pct(ganhoPreco)}% maior.`
     : a.preco === false ? ' Preço no tamanho original.' : '';
   tamCardInfo.textContent = partes.length
     ? `Cards ${partes.join(' e ')}.${preco} O espaço extra vai para a foto; o nome acompanha.`
@@ -435,6 +443,86 @@ tamCardRadios.forEach((r) => r.addEventListener('change', () => definirAjusteCar
 tamCardQuanto.addEventListener('input', () => definirAjusteCard({ quanto: Number(tamCardQuanto.value) / 100 }));
 tamCardPreco.addEventListener('change', () => definirAjusteCard({ preco: tamCardPreco.checked }));
 syncAjusteCardUI();
+
+// ---------------------------------------------------------------------------
+// Tamanho do preço (automático = acompanha o card; manual = o usuário escolhe)
+// ---------------------------------------------------------------------------
+const tamPrecoBox = $('tamanhoPreco');
+const tamPrecoRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="tamPreco"]')];
+const tamPrecoManualBox = $('tamPrecoManualBox');
+const tamPrecoEscala = $<HTMLInputElement>('tamPrecoEscala');
+const tamPrecoMenos = $<HTMLButtonElement>('tamPrecoMenos');
+const tamPrecoMais = $<HTMLButtonElement>('tamPrecoMais');
+const tamPrecoTxt = $('tamPrecoTxt');
+const tamPrecoInfo = $('tamPrecoInfo');
+const PRECO_PASSO = 5, PRECO_MIN = 60, PRECO_MAX = 200;
+
+function tamanhoPrecoAtual(t: PhotoTemplate): TamanhoPreco {
+  return state.priceSize[t.id] ?? { modo: 'auto' };
+}
+
+/** Escala manual em % (o último valor escolhido fica guardado mesmo voltando ao automático). */
+const ultimaEscalaManual: Record<string, number> = {};
+const escalaManualPct = (t: PhotoTemplate) => {
+  const p = tamanhoPrecoAtual(t);
+  return p.modo === 'manual' ? Math.round(p.escala * 100) : ultimaEscalaManual[t.id] ?? 100;
+};
+
+function syncTamanhoPrecoUI() {
+  const t = template();
+  const ok = aceitaAjusteCard(t);
+  tamPrecoBox.hidden = !ok;
+  if (!ok) return;
+  const p = tamanhoPrecoAtual(t);
+  tamPrecoRadios.forEach((r) => (r.checked = r.value === p.modo));
+  tamPrecoManualBox.hidden = p.modo !== 'manual';
+  const pct = escalaManualPct(t);
+  tamPrecoEscala.value = String(pct);
+  tamPrecoTxt.textContent = `${pct}%`;
+  tamPrecoMenos.disabled = pct <= PRECO_MIN;
+  tamPrecoMais.disabled = pct >= PRECO_MAX;
+  // No manual, a opção "aumentar o preço junto com o card" não se aplica.
+  syncAjusteCardUI();
+}
+
+function mostrarTamanhoPreco(t: PhotoTemplate, maior: number, menor: number, limitado: boolean) {
+  if (!aceitaAjusteCard(t)) return;
+  const p = tamanhoPrecoAtual(t);
+  if (p.modo === 'auto') {
+    tamPrecoInfo.textContent = 'O preço segue o tamanho do modelo e cresce junto quando o card aumenta. Use “Manual” para escolher o tamanho.';
+    return;
+  }
+  const pedido = Math.round(p.escala * 100);
+  const aplicado = Math.round((p.escala < 1 ? menor : maior) * 100);
+  tamPrecoInfo.textContent = limitado
+    ? `Pedido: ${pedido}%. Neste layout o preço chega a ${aplicado}% sem sair do card nem cobrir a foto ou o nome.`
+    : `Preço em ${aplicado}% do tamanho do modelo. A foto e o nome se ajustam para dar espaço.`;
+}
+
+const definirTamanhoPreco = (p: TamanhoPreco) => {
+  const t = template();
+  state.priceSize[t.id] = p;
+  if (p.modo === 'manual') ultimaEscalaManual[t.id] = Math.round(p.escala * 100);
+  save();
+  syncTamanhoPrecoUI();
+  scheduleRender();
+};
+const definirEscalaPct = (pct: number) =>
+  definirTamanhoPreco({ modo: 'manual', escala: Math.min(PRECO_MAX, Math.max(PRECO_MIN, pct)) / 100 });
+tamPrecoRadios.forEach((r) =>
+  r.addEventListener('change', () => {
+    const t = template();
+    if (r.value === 'auto') {
+      const atual = tamanhoPrecoAtual(t);
+      if (atual.modo === 'manual') ultimaEscalaManual[t.id] = Math.round(atual.escala * 100);
+      definirTamanhoPreco({ modo: 'auto' });
+    } else definirEscalaPct(escalaManualPct(t));
+  }),
+);
+tamPrecoEscala.addEventListener('input', () => definirEscalaPct(Number(tamPrecoEscala.value)));
+tamPrecoMenos.addEventListener('click', () => definirEscalaPct(escalaManualPct(template()) - PRECO_PASSO));
+tamPrecoMais.addEventListener('click', () => definirEscalaPct(escalaManualPct(template()) + PRECO_PASSO));
+syncTamanhoPrecoUI();
 
 validityInput.value = state.validity;
 validityInput.addEventListener('input', () => {

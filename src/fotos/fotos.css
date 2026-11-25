@@ -180,6 +180,13 @@
 .tamanho-nome__px input[type='range'] { flex: 1; accent-color: var(--gold-dark); }
 .tamanho-nome__num { display: flex; align-items: center; gap: 4px; font-size: 0.82rem; }
 .tamanho-nome__num input { width: 64px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.tamanho-preco__passo {
+  width: 30px; height: 30px; flex: none;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  font: inherit; font-size: 1.1rem; font-weight: 700; line-height: 1; cursor: pointer; color: var(--navy);
+}
+.tamanho-preco__passo:hover { border-color: var(--gold-dark); background: #fdf7e6; }
+.tamanho-preco__passo:disabled { opacity: 0.4; cursor: default; }
 
 .cores-quadrados {
   border: 1px solid var(--line);

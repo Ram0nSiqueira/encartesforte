@@ -64,6 +64,21 @@
         <p class="hint" id="tamCardInfo"></p>
       </fieldset>
 
+      <fieldset class="tamanho-nome" id="tamanhoPreco">
+        <legend>Tamanho do preço</legend>
+        <div class="tamanho-nome__opcoes" role="radiogroup" aria-label="Tamanho do preço">
+          <label><input type="radio" name="tamPreco" value="auto"> Automático</label>
+          <label><input type="radio" name="tamPreco" value="manual"> Manual</label>
+        </div>
+        <div class="tamanho-nome__px" id="tamPrecoManualBox" hidden>
+          <button type="button" class="tamanho-preco__passo" id="tamPrecoMenos" aria-label="Diminuir o preço">−</button>
+          <input type="range" id="tamPrecoEscala" min="60" max="200" step="5" aria-label="Tamanho do preço em %">
+          <button type="button" class="tamanho-preco__passo" id="tamPrecoMais" aria-label="Aumentar o preço">+</button>
+          <span class="tamanho-nome__num" id="tamPrecoTxt"></span>
+        </div>
+        <p class="hint" id="tamPrecoInfo"></p>
+      </fieldset>
+
       <fieldset class="cores-quadrados" id="coresQuadrados">
         <legend>Cor do Card De Produtos</legend>
         <div class="cores-quadrados__modo">
