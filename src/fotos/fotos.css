@@ -102,17 +102,23 @@
 .btn-perigo { border-color: #c62828; color: #c62828; background: #fff; }
 .btn-perigo:hover { background: #c62828; color: #fff; }
 
-.historico {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px 12px;
-  margin: 0;
-  min-width: 0; /* fieldset cresce com textos longos por padrão: aqui eles são cortados com "…" */
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.historico { border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+/* Título clicável com setinha (▸ fechado, ▾ aberto). */
+.historico__titulo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; cursor: pointer; list-style: none;
+  font-size: 0.85rem; font-weight: 600; color: #3b4652; user-select: none;
 }
-.historico legend { font-size: 0.85rem; font-weight: 600; color: #3b4652; padding: 0 4px; }
+.historico__titulo::-webkit-details-marker { display: none; }
+.historico__titulo::before {
+  content: ''; width: 0; height: 0; flex: none;
+  border-left: 6px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  transition: transform 0.15s;
+}
+.historico[open] > .historico__titulo::before { transform: rotate(90deg); }
+.historico__titulo:hover { color: var(--navy); }
+.historico__qtd { font-weight: 400; color: var(--gray); }
+.historico__corpo { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; min-width: 0; }
 .historico .hint { margin: 0; }
 .historico__lista { display: flex; flex-direction: column; gap: 8px; }
 .historico__item {
@@ -127,7 +133,8 @@
 .historico__texto strong { font-size: 0.84rem; color: var(--navy); }
 .historico__texto span { color: var(--gray); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .historico__texto span[data-r='info'] { white-space: normal; }
-.historico__item .btn-ghost { flex: none; }
+.historico__acoes { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.historico__acoes .btn-ghost { padding: 6px 10px; }
 .photo__current { position: relative; }
 .photo__badge {
   position: absolute;

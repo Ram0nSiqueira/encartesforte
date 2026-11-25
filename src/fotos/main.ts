@@ -1022,8 +1022,8 @@ function checkService() {
 }
 
 // ---------------------------------------------------------------------------
-// Histórico de cards: as 2 últimas versões (salvas ao remover todos e ao baixar a imagem).
-// Restaurar troca a versão com os cards atuais, então nada se perde.
+// Histórico de cards: as 3 últimas versões (salvas ao remover todos e ao baixar a imagem).
+// Restaurar troca a versão com os cards atuais; cada versão pode ser removida. Bloco recolhível.
 // ---------------------------------------------------------------------------
 interface VersaoCards {
   quando: number;
@@ -1038,9 +1038,18 @@ interface VersaoCards {
 }
 
 const HISTORICO_KEY = 'encartesforte:historico-cards-v1';
-const HISTORICO_MAX = 2;
+const HISTORICO_MAX = 3;
+const HISTORICO_ABERTO_KEY = 'encartesforte:historico-aberto';
+const historicoBox = $<HTMLDetailsElement>('historico');
 const historicoLista = $('historicoLista');
 const historicoInfo = $('historicoInfo');
+const historicoQtd = $('historicoQtd');
+
+// Aberto/fechado: começa fechado e lembra a última escolha.
+historicoBox.open = localStorage.getItem(HISTORICO_ABERTO_KEY) === '1';
+historicoBox.addEventListener('toggle', () => {
+  try { localStorage.setItem(HISTORICO_ABERTO_KEY, historicoBox.open ? '1' : '0'); } catch { /* sem espaço */ }
+});
 
 function carregarHistorico(): VersaoCards[] {
   try {
@@ -1106,7 +1115,7 @@ function versaoAtual(motivo: VersaoCards['motivo']): VersaoCards | null {
   };
 }
 
-/** Põe a versão no topo (sem repetir) e mantém só as 2 últimas. */
+/** Põe a versão no topo (sem repetir) e mantém só as 3 últimas. */
 function adicionarAoHistorico(v: VersaoCards | null) {
   if (!v) return;
   const a = assinatura(v);
@@ -1128,9 +1137,10 @@ const MOTIVOS: Record<VersaoCards['motivo'], string> = {
 
 function desenharHistorico() {
   historicoLista.replaceChildren();
+  historicoQtd.textContent = `(${historico.length})`;
   historicoInfo.textContent = historico.length
-    ? 'Clique em “Restaurar” para voltar os cards como estavam (os cards atuais ficam guardados aqui).'
-    : 'Ainda não há versões salvas. Os cards são guardados aqui antes de “Remover todos os cards” e ao baixar a imagem (as 2 últimas).';
+    ? '“Restaurar” volta os cards como estavam (os atuais ficam guardados aqui). “Remover” apaga a versão do histórico.'
+    : 'Ainda não há versões salvas. Os cards são guardados aqui antes de “Remover todos os cards” e ao baixar a imagem (as 3 últimas).';
   historico.forEach((v, i) => {
     const modelo = PHOTO_TEMPLATES.find((t) => t.id === v.templateId);
     const usados = v.products.filter((p) => !cardVazio(p));
@@ -1141,7 +1151,10 @@ function desenharHistorico() {
     item.innerHTML = `
       <img class="historico__mini" alt="">
       <div class="historico__texto"><strong></strong><span data-r="info"></span><span data-r="nomes"></span></div>
-      <button type="button" class="btn-ghost btn-gold">Restaurar</button>`;
+      <div class="historico__acoes">
+        <button type="button" class="btn-ghost btn-gold" data-act="restaurar">Restaurar</button>
+        <button type="button" class="btn-ghost btn-perigo" data-act="remover">Remover</button>
+      </div>`;
     const img = item.querySelector('img')!;
     if (v.miniatura) img.src = v.miniatura;
     else img.hidden = true;
@@ -1151,9 +1164,22 @@ function desenharHistorico() {
     const nomes = usados.map((p) => p.name.trim()).filter(Boolean);
     item.querySelector('[data-r="nomes"]')!.textContent = nomes.length ? nomes.join(', ') : '(sem nomes)';
     item.querySelector('[data-r="nomes"]')!.setAttribute('title', nomes.join(', '));
-    item.querySelector('button')!.addEventListener('click', () => restaurarVersao(i));
+    item.querySelector('[data-act="restaurar"]')!.addEventListener('click', () => restaurarVersao(i));
+    item.querySelector('[data-act="remover"]')!.addEventListener('click', () => removerVersao(i));
     historicoLista.appendChild(item);
   });
+}
+
+/** Apaga uma versão do histórico (com confirmação). Não mexe nos cards atuais. */
+function removerVersao(i: number) {
+  const v = historico[i];
+  if (!v) return;
+  const modelo = PHOTO_TEMPLATES.find((t) => t.id === v.templateId);
+  const data = new Date(v.quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  if (!confirm(`Remover do histórico a versão “${modelo?.name.replace(/\s*\(.*\)$/, '') ?? 'Modelo'} — ${v.quantidade} cards” (${data})?\n\nEla não poderá mais ser restaurada.`)) return;
+  historico = historico.filter((_, j) => j !== i);
+  salvarHistorico();
+  desenharHistorico();
 }
 
 function restaurarVersao(i: number) {

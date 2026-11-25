@@ -97,11 +97,13 @@
         <span class="hint" id="cardsInfo"></span>
       </div>
 
-      <fieldset class="historico" id="historico">
-        <legend>Histórico de cards</legend>
-        <p class="hint" id="historicoInfo"></p>
-        <div class="historico__lista" id="historicoLista"></div>
-      </fieldset>
+      <details class="historico" id="historico">
+        <summary class="historico__titulo">Histórico de cards <span class="historico__qtd" id="historicoQtd"></span></summary>
+        <div class="historico__corpo">
+          <p class="hint" id="historicoInfo"></p>
+          <div class="historico__lista" id="historicoLista"></div>
+        </div>
+      </details>
 
       <button type="button" class="btn" id="baixar">Baixar imagem (PNG)</button>
       <p class="error" id="erroDownload" hidden></p>
