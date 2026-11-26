@@ -131,10 +131,29 @@ function setFont(ctx: CanvasRenderingContext2D, weight: number, size: number) {
   ctx.font = `${weight} ${size}px ${FONT}`;
 }
 
-/** Escreve um texto no maior tamanho que cabe na caixa do slot. */
+interface TextoPosicionado { text: string; font: string; letterSpacing: number; x: number; y: number; top: number; bottom: number }
+
+/** Escreve o texto no maior tamanho que cabe na caixa do slot. */
 function drawFitted(ctx: CanvasRenderingContext2D, raw: string, slot: TextSlot, color: string) {
+  const p = posicionarTexto(ctx, raw, slot);
+  if (p) desenharTexto(ctx, p, color);
+}
+
+/** Desenha um texto já posicionado; `dy` desloca na vertical. */
+function desenharTexto(ctx: CanvasRenderingContext2D, p: TextoPosicionado, color: string, dy = 0) {
+  ctx.font = p.font;
+  ctx.letterSpacing = `${p.letterSpacing}px`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(p.text, p.x, p.y + dy);
+  ctx.letterSpacing = '0px';
+}
+
+/** Calcula tamanho e posição do texto na caixa do slot (sem desenhar); null se vazio. */
+function posicionarTexto(ctx: CanvasRenderingContext2D, raw: string, slot: TextSlot): TextoPosicionado | null {
   const text = slot.uppercase ? raw.toUpperCase() : raw;
-  if (!text.trim()) return;
+  if (!text.trim()) return null;
   const font = (size: number) => `${slot.weight} ${size}px ${stack(slot.font)}`;
   ctx.letterSpacing = `${slot.letterSpacing ?? 0}px`;
 
@@ -169,12 +188,8 @@ function drawFitted(ctx: CanvasRenderingContext2D, raw: string, slot: TextSlot, 
     slot.valign === 'top' ? box.y + m.ascent
     : slot.valign === 'bottom' ? box.y + box.h - m.descent
     : box.y + (box.h - textH) / 2 + m.ascent;
-
-  ctx.fillStyle = color;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(text, x, y);
   ctx.letterSpacing = '0px';
+  return { text, font: font(size), letterSpacing: slot.letterSpacing ?? 0, x, y, top: y - m.ascent, bottom: y + m.descent };
 }
 
 function wrapWords(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
@@ -325,6 +340,23 @@ export async function renderSingleProduct(canvas: HTMLCanvasElement, t: SinglePr
   if (layout.kind === 'empilhado') {
     drawStackedTexts(ctx, t, layout.textBox, data);
     drawRaisedCentsPrice(ctx, t, layout.priceBox, data.price);
+  } else if (layout.unidadeAbaixoDoPreco && data.price != null) {
+    // Preço + unidade como um bloco: unidade centralizada logo abaixo do preço,
+    // e o bloco centralizado entre o topo da caixa do preço e `fim`.
+    drawFitted(ctx, data.name.trim(), layout.name, t.textColor);
+    const g = layout.unidadeAbaixoDoPreco;
+    const un = posicionarTexto(ctx, data.unit.trim(), layout.unit);
+    const pb = layout.price.box;
+    const hPreco = g.fim - pb.y - (un ? layout.unit.box.h + g.espaco : 0);
+    const { int, cents } = formatPrice(data.price);
+    const pr = posicionarTexto(ctx, `${int},${cents}`, { ...layout.price, box: { ...pb, h: hPreco } });
+    if (pr) {
+      const altPreco = pr.bottom - pr.top;
+      const total = altPreco + (un ? g.espaco + (un.bottom - un.top) : 0);
+      const topo = pb.y + (g.fim - pb.y - total) / 2;
+      desenharTexto(ctx, pr, t.textColor, topo - pr.top);
+      if (un) desenharTexto(ctx, un, t.textColor, topo + altPreco + g.espaco - un.top);
+    }
   } else {
     drawFitted(ctx, data.name.trim(), layout.name, t.textColor);
     if (data.price != null) {

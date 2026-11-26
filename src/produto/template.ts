@@ -38,6 +38,11 @@ export type TemplateLayout =
       name: TextSlot;
       price: TextSlot;
       unit: TextSlot;
+      /**
+       * Unidade centralizada logo abaixo do preço (usa x/largura/altura de `unit.box`).
+       * O bloco preço + unidade fica centralizado entre o topo da caixa do preço e `fim`.
+       */
+      unidadeAbaixoDoPreco?: { espaco: number; fim: number };
     };
 
 export interface SingleProductTemplate {
@@ -101,11 +106,13 @@ export const TEMPLATES: SingleProductTemplate[] = [
         font: ANTON, weight: 400, maxSize: 900,
         align: 'center', valign: 'center', letterSpacing: 4,
       },
+      // Unidade centralizada embaixo do preço (longe das bordas: sai na impressão).
       unit: {
-        box: { x: 1208, y: 653, w: 112, h: 86 },
+        box: { x: 262, y: 0, w: 945, h: 72 },
         font: ANTON, weight: 400, maxSize: 130, minSize: 14,
-        align: 'right', valign: 'bottom', heightRef: 'kg',
+        align: 'center', valign: 'top', heightRef: 'kg',
       },
+      unidadeAbaixoDoPreco: { espaco: 16, fim: 725 },
     },
   },
 ];
