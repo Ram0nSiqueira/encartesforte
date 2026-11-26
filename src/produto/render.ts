@@ -332,15 +332,20 @@ export async function renderSingleProduct(canvas: HTMLCanvasElement, t: SinglePr
   canvas.width = t.width;
   canvas.height = t.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.drawImage(img, 0, 0, t.width, t.height);
-  for (const r of t.erase) eraseRect(ctx, r);
-  for (const c of t.clone ?? []) ctx.putImageData(ctx.getImageData(c.sx, c.sy, c.w, c.h), c.x, c.y);
+  if (t.fundoBranco) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, t.width, t.height);
+  } else {
+    ctx.drawImage(img, 0, 0, t.width, t.height);
+    for (const r of t.erase) eraseRect(ctx, r);
+    for (const c of t.clone ?? []) ctx.putImageData(ctx.getImageData(c.sx, c.sy, c.w, c.h), c.x, c.y);
+  }
 
   const layout = t.layout;
   if (layout.kind === 'empilhado') {
     drawStackedTexts(ctx, t, layout.textBox, data);
     drawRaisedCentsPrice(ctx, t, layout.priceBox, data.price);
-  } else if (layout.unidadeAbaixoDoPreco && data.price != null) {
+  } else if (layout.unidadeAbaixoDoPreco) {
     // Preço + unidade como um bloco: unidade centralizada logo abaixo do preço,
     // e o bloco centralizado entre o topo da caixa do preço e `fim`.
     drawFitted(ctx, data.name.trim(), layout.name, t.textColor);
@@ -348,9 +353,12 @@ export async function renderSingleProduct(canvas: HTMLCanvasElement, t: SinglePr
     const un = posicionarTexto(ctx, data.unit.trim(), layout.unit);
     const pb = layout.price.box;
     const hPreco = g.fim - pb.y - (un ? layout.unit.box.h + g.espaco : 0);
-    const { int, cents } = formatPrice(data.price);
-    const pr = posicionarTexto(ctx, `${int},${cents}`, { ...layout.price, box: { ...pb, h: hPreco } });
-    if (pr) {
+    const valor = data.price != null ? formatPrice(data.price) : null;
+    const pr = valor ? posicionarTexto(ctx, `${valor.int},${valor.cents}`, { ...layout.price, box: { ...pb, h: hPreco } }) : null;
+    if (!pr) {
+      // Sem preço: só a unidade, no lugar de sempre (embaixo).
+      if (un) desenharTexto(ctx, un, t.textColor, g.fim - un.bottom);
+    } else {
       const altPreco = pr.bottom - pr.top;
       const total = altPreco + (un ? g.espaco + (un.bottom - un.top) : 0);
       const topo = pb.y + (g.fim - pb.y - total) / 2;

@@ -56,6 +56,8 @@ export interface SingleProductTemplate {
   erase: EraseRect[];
   /** Cópias de trechos limpos da imagem por cima de áreas difíceis (ex.: borda do papel). */
   clone?: { sx: number; sy: number; x: number; y: number; w: number; h: number }[];
+  /** Fundo todo branco (não usa a imagem do modelo; `erase`/`clone` são ignorados). */
+  fundoBranco?: boolean;
   layout: TemplateLayout;
 }
 
@@ -87,32 +89,29 @@ export const TEMPLATES: SingleProductTemplate[] = [
     width: 1376,
     height: 768,
     textColor: '#0a0a0a',
-    erase: [
-      { x: 285, y: 8, w: 815, h: 172 }, // nome
-      { x: 255, y: 225, w: 960, h: 535 }, // preço
-      { x: 1240, y: 645, w: 90, h: 100, noRight: true }, // unidade (encostada na borda do papel)
-    ],
-    // Refaz a borda direita do papel ao lado da unidade com um trecho limpo logo acima.
-    clone: [{ sx: 1328, sy: 540, x: 1328, y: 645, w: 14, h: 100 }],
+    // Fundo todo branco; textos com ~90 px de margem nas laterais (não cortam na impressão).
+    fundoBranco: true,
+    erase: [],
     layout: {
       kind: 'caixas',
       name: {
-        box: { x: 130, y: 22, w: 1116, h: 148 },
+        box: { x: 90, y: 32, w: 1196, h: 106 }, // espaço em cima para acentos (Ê, Ã…)
         font: ANTON, weight: 400, maxSize: 260, minSize: 50,
         align: 'center', valign: 'bottom', heightRef: 'Hbdhl',
       },
+      // Preço grande: ocupa do nome até a unidade, na largura quase toda.
       price: {
-        box: { x: 262, y: 240, w: 945, h: 512 },
+        box: { x: 140, y: 166, w: 1096, h: 586 },
         font: ANTON, weight: 400, maxSize: 900,
         align: 'center', valign: 'center', letterSpacing: 4,
       },
-      // Unidade centralizada embaixo do preço (longe das bordas: sai na impressão).
+      // Unidade centralizada embaixo do preço.
       unit: {
-        box: { x: 262, y: 0, w: 945, h: 72 },
+        box: { x: 140, y: 0, w: 1096, h: 56 },
         font: ANTON, weight: 400, maxSize: 130, minSize: 14,
         align: 'center', valign: 'top', heightRef: 'kg',
       },
-      unidadeAbaixoDoPreco: { espaco: 16, fim: 725 },
+      unidadeAbaixoDoPreco: { espaco: 8, fim: 752 },
     },
   },
 ];
